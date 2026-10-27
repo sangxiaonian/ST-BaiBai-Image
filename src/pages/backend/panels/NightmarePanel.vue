@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { fetchNightmareModels, testNightmareConnection, type NightmareModel } from '@/backends/nightmare';
+import {
+  fetchNightmareModels,
+  fetchNightmareSchedulers,
+  testNightmareConnection,
+  type NightmareModel,
+} from '@/backends/nightmare';
 import Collapsible from '@/components/Collapsible.vue';
 import Icon from '@/components/Icon.vue';
 import { activeComfyPreset, settings } from '@/state/settings';
@@ -9,7 +14,9 @@ const testing = ref(false);
 const loadingModels = ref(false);
 const error = ref('');
 const models = ref<NightmareModel[]>([]);
+const schedulers = ref<string[]>([]);
 const inUse = computed(() => settings.defaultBackend === 'nightmare');
+const selectedModel = computed(() => models.value.find(model => model.id === settings.nightmare.model));
 const comfyAnimaPreset = computed(() => {
   const preset = activeComfyPreset();
   return preset.mode === 'simple' && preset.simple.template === 'anima' ? preset : null;
@@ -27,6 +34,20 @@ function errorText(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
 }
 
+function applyModelScheduler(): void {
+  const recommended = selectedModel.value?.scheduler;
+  if (recommended) settings.nightmare.scheduler = recommended;
+}
+
+async function refreshSchedulers(): Promise<void> {
+  try {
+    schedulers.value = await fetchNightmareSchedulers(settings.nightmare);
+  } catch {
+    // Older Nightmare builds may not expose flow schemas; keep manual entry available.
+    schedulers.value = [];
+  }
+}
+
 async function refreshModels(showSuccess = true): Promise<void> {
   if (loadingModels.value) return;
   loadingModels.value = true;
@@ -34,6 +55,8 @@ async function refreshModels(showSuccess = true): Promise<void> {
   try {
     models.value = await fetchNightmareModels(settings.nightmare);
     if (!settings.nightmare.model && models.value.length) settings.nightmare.model = models.value[0].id;
+    if (!settings.nightmare.scheduler.trim()) applyModelScheduler();
+    await refreshSchedulers();
     if (showSuccess) toastr.success(`已读取 ${models.value.length} 个 Nightmare 模型`, '柏宝绘');
   } catch (reason) {
     error.value = errorText(reason);
@@ -50,6 +73,8 @@ async function testConnection(): Promise<void> {
     const result = await testNightmareConnection(settings.nightmare);
     models.value = await fetchNightmareModels(settings.nightmare);
     if (!settings.nightmare.model && models.value.length) settings.nightmare.model = models.value[0].id;
+    if (!settings.nightmare.scheduler.trim()) applyModelScheduler();
+    await refreshSchedulers();
     toastr.success(result.rendering ? 'Nightmare 已连接（当前正在生成）' : 'Nightmare 连接正常', '柏宝绘');
   } catch (reason) {
     toastr.error(errorText(reason), 'Nightmare 连接失败');
@@ -106,7 +131,7 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
               <Icon name="refresh" :size="12" /> {{ loadingModels ? '读取中…' : '刷新模型' }}
             </button>
           </div>
-          <select v-model="settings.nightmare.model" class="bbi-input bbi-select">
+          <select v-model="settings.nightmare.model" class="bbi-input bbi-select" @change="applyModelScheduler">
             <option value="">请选择已安装模型</option>
             <option v-for="model in models" :key="model.id" :value="model.id">
               {{ model.name && model.name !== model.id ? `${model.name} · ${model.id}` : model.id }}{{ model.family ? ` (${model.family})` : '' }}
@@ -129,7 +154,18 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
           <label class="bbi-field"><span class="bbi-field-label">横屏尺寸</span><input v-model="settings.nightmare.landscapeSize" class="bbi-input" placeholder="1216×832" /></label>
           <label class="bbi-field"><span class="bbi-field-label">步数（0 使用模型默认）</span><input v-model.number="settings.nightmare.steps" class="bbi-input" type="number" min="0" max="100" /></label>
           <label class="bbi-field"><span class="bbi-field-label">CFG（0 使用模型默认）</span><input v-model.number="settings.nightmare.cfg" class="bbi-input" type="number" min="0" max="50" step="0.1" /></label>
-          <label class="bbi-field"><span class="bbi-field-label">调度器（可留空）</span><input v-model="settings.nightmare.scheduler" class="bbi-input" placeholder="模型默认" /></label>
+          <label class="bbi-field">
+            <span class="bbi-field-label">调度器</span>
+            <select v-if="schedulers.length" v-model="settings.nightmare.scheduler" class="bbi-input bbi-select">
+              <option value="">使用模型推荐值（{{ selectedModel?.scheduler || 'Nightmare 默认' }}）</option>
+              <option v-if="selectedModel?.scheduler && !schedulers.includes(selectedModel.scheduler)" :value="selectedModel.scheduler">
+                {{ selectedModel.scheduler }}（模型推荐）
+              </option>
+              <option v-for="scheduler in schedulers" :key="scheduler" :value="scheduler">{{ scheduler }}</option>
+            </select>
+            <input v-else v-model="settings.nightmare.scheduler" class="bbi-input" placeholder="模型推荐默认；也可手动填写，如 euler" />
+            <span class="bbi-field-hint">切换模型时会采用 Nightmare 返回的推荐调度器；可从 API 返回的可选项中手动选择。</span>
+          </label>
           <label class="bbi-field"><span class="bbi-field-label">固定种子（0 = 随机）</span><input v-model.number="settings.nightmare.seed" class="bbi-input" type="number" min="0" max="4294967295" /></label>
         </div>
         <label class="bbi-switch-row">

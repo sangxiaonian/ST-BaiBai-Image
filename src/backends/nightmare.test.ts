@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchNightmareModels, generateNightmareImage, testNightmareConnection } from '@/backends/nightmare';
+import {
+  fetchNightmareModels,
+  fetchNightmareSchedulers,
+  generateNightmareImage,
+  testNightmareConnection,
+} from '@/backends/nightmare';
 import type { NightmareSettings } from '@/state/settings';
 
 function nightmare(overrides: Partial<NightmareSettings> = {}): NightmareSettings {
@@ -31,13 +36,22 @@ describe('Nightmare API', () => {
   it('tests the local API and reads installed model ids with bearer authentication', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ rendering: false }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'moss', family: 'dit' }]), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        models: [{ id: 'moss', label: 'MOSS Image', family: 'dit', scheduler: 'euler' }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        nodes: [{ widgets: [{ name: 'scheduler', options: ['euler', 'euler_a', 'euler'] }] }],
+      }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(testNightmareConnection(nightmare())).resolves.toEqual({ rendering: false });
-    await expect(fetchNightmareModels(nightmare())).resolves.toEqual([{ id: 'moss', family: 'dit' }]);
+    await expect(fetchNightmareModels(nightmare())).resolves.toEqual([{
+      id: 'moss', name: 'MOSS Image', family: 'dit', scheduler: 'euler',
+    }]);
+    await expect(fetchNightmareSchedulers(nightmare())).resolves.toEqual(['euler', 'euler_a']);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ headers: { Authorization: 'Bearer secret-token' } });
     expect(fetchMock.mock.calls[1][0]).toBe('http://127.0.0.1:8820/models');
+    expect(fetchMock.mock.calls[2][0]).toBe('http://127.0.0.1:8820/flows/txt2img');
   });
 
   it('sends fixed and dynamic prompts, downloads the first generated image, and supports revoke', async () => {

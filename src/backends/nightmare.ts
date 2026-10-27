@@ -13,6 +13,7 @@ export interface NightmareModel {
   id: string;
   family?: string;
   name?: string;
+  scheduler?: string;
 }
 
 export interface NightmareGenerateValues {
@@ -95,7 +96,12 @@ function modelList(value: unknown): NightmareModel[] {
     return [{
       id,
       ...(typeof item?.family === 'string' ? { family: item.family } : {}),
-      ...(typeof item?.name === 'string' ? { name: item.name } : {}),
+      ...(typeof item?.label === 'string'
+        ? { name: item.label }
+        : typeof item?.name === 'string'
+          ? { name: item.name }
+          : {}),
+      ...(typeof item?.scheduler === 'string' ? { scheduler: item.scheduler } : {}),
     }];
   });
 }
@@ -111,6 +117,31 @@ export async function fetchNightmareModels(
   });
   if (!response.ok) throw await requestError(response, '读取 Nightmare 模型列表失败');
   return modelList(await response.json());
+}
+
+/** Read the scheduler choices advertised by Nightmare's text-to-image flow schema. */
+export async function fetchNightmareSchedulers(
+  settings: Pick<NightmareSettings, 'url' | 'token'>,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  if (!settings.url.trim()) throw new NightmareError('请先填写 Nightmare 服务地址');
+  const response = await fetch(`${baseUrl(settings.url)}/flows/txt2img`, {
+    headers: authHeaders(settings.token),
+    signal,
+  });
+  if (!response.ok) throw await requestError(response, '读取 Nightmare 调度器列表失败');
+  const schema = object(await response.json());
+  const nodes = Array.isArray(schema?.nodes) ? schema.nodes : [];
+  const values = nodes.flatMap(node => {
+    const widgets = object(node)?.widgets;
+    if (!Array.isArray(widgets)) return [];
+    return widgets.flatMap(widget => {
+      const item = object(widget);
+      if (item?.name !== 'scheduler' || !Array.isArray(item.options)) return [];
+      return item.options.filter((option): option is string => typeof option === 'string' && !!option.trim());
+    });
+  });
+  return [...new Set(values)];
 }
 
 export async function testNightmareConnection(
@@ -213,11 +244,12 @@ async function runNightmareImage(
     if (!imageResponse.ok) throw await requestError(imageResponse, '下载 Nightmare 图片失败');
     const blob = await imageResponse.blob();
     const format = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const url = URL.createObjectURL(blob);
     return {
-      url: URL.createObjectURL(blob),
+      url,
       filename: `nightmare-${Date.now()}.${format}`,
       format,
-      revoke() { URL.revokeObjectURL(this.url); },
+      revoke() { URL.revokeObjectURL(url); },
     };
   } finally {
     signal?.removeEventListener('abort', cancel);
