@@ -1,0 +1,46 @@
+src/backends/nightmare.ts
+  s_5e369e4bbf61a2::t_c2cdb891e0095f 19-180
+  s_8ff6804f849f4e::t_bbdb3b04aedfc0 1-18,181-225
+src/state/settings.nightmareMigration.test.ts
+  s_5e369e4bbf61a2::t_fed4d952996351 56
+  s_e3156676a2dc10::t_2a194d0a403ff8 1-55,57-62
+src/pages/backend/panels/NightmarePanel.vue
+  s_5e369e4bbf61a2::t_c2cdb891e0095f 5-101,117,122,126,134,148-153
+  s_5e369e4bbf61a2::t_913ebbb3cf8717 136-139
+  s_8ff6804f849f4e::t_0b6ed2c89b1f75 1-4,102-116,118-121,123-125,127-133,135,140-147,154
+src/backends/nightmare.test.ts
+  s_5e369e4bbf61a2::t_c2cdb891e0095f 32,35,41,44,47,54,69,73,78,80-98,104
+  s_8ff6804f849f4e::t_dbad6a41bf2848 1-31,33-34,36-40,42-43,45-46,48-53,55-68,70-72,74-77,79,99-103,105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "196d9461926415215043ef72db3a6e5c7bca3830",
+  "prompts": {},
+  "sessions": {
+    "s_5e369e4bbf61a2": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "943f38f9-9616-4fbf-9904-9e5b18980d4e",
+        "model": "copilot/gpt-6-luna"
+      },
+      "human_author": null
+    },
+    "s_8ff6804f849f4e": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "0115b3b9-01a0-4b6c-980e-eda96bf939db",
+        "model": "gemini-4-argon"
+      },
+      "human_author": "swdwte <Yapeng_Ping@SAIC-GM.com>"
+    },
+    "s_e3156676a2dc10": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "3c8cbd4f-6856-4825-ba3c-045e38202d08",
+        "model": "copilot/gpt-6-luna"
+      },
+      "human_author": "swdwte <Yapeng_Ping@SAIC-GM.com>"
+    }
+  }
+}
