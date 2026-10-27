@@ -257,8 +257,8 @@ export async function generate(
   const size = normalizeOrientation(request.size);
   const seed = decideSeed(status.backend, request.seed);
 
-  // NAI 要过并发闸门,可能先排一会儿队;ComfyUI 直接发,队列在服务端
-  report({ phase: status.backend === 'nai' ? 'queued' : 'generating' });
+  // NAI 与 Nightmare 在客户端排队;ComfyUI 直接发,队列在服务端
+  report({ phase: status.backend === 'nai' || status.backend === 'nightmare' ? 'queued' : 'generating' });
 
   let output;
   try {

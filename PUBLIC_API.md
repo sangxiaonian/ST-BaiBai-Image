@@ -121,9 +121,9 @@ if (!status.configured) {
 {
   apiVersion: 1,
   pluginVersion: "0.2.5",
-  backend: "nai",              // 'nai' | 'comfyui'
+  backend: "nai",              // 'nai' | 'comfyui' | 'nightmare'
   configured: true,
-  model: "nai-diffusion-4-5-full",  // NAI 是模型名；ComfyUI 是当前工作流预设名
+  model: "nai-diffusion-4-5-full",  // NAI / Nightmare 是模型名；ComfyUI 是当前工作流预设名
   supportsCharacters: true,    // 当前后端支不支持多角色提示
   reason: "",                  // configured=false 时的原因；已就绪为空串
 }
@@ -131,7 +131,7 @@ if (!status.configured) {
 
 > **不含服务地址与 API Key。** 这两样永远不会出现在任何公开返回值里。
 
-`supportsCharacters` 只看模型，与配没配齐无关——你可以在用户还没填 Key 时就知道该不该准备 `characters`。**ComfyUI 恒为 `false`**。
+`supportsCharacters` 只看模型，与配没配齐无关——你可以在用户还没填 Key 时就知道该不该准备 `characters`。**ComfyUI 与 Nightmare 恒为 `false`**。
 
 ## 调生图
 
@@ -153,7 +153,7 @@ myPanel.querySelector('img').src = result.dataUrl;   // 想显示在哪就显示
 | --- | --- | --- |
 | `prompt` | `string` | **必填**，正向 danbooru 短 tag。空串抛 `invalid_args` |
 | `nl` | `string?` | 自然语言描述 |
-| `negative` | `string?` | 本画面动态负面。**只对 ComfyUI 生效**；NAI 的负面取用户渠道配置 |
+| `negative` | `string?` | 本画面动态负面。对 ComfyUI 与 Nightmare 生效；NAI 的负面取用户渠道配置 |
 | `characters` | `PublicCharacterPrompt[]?` | 多角色提示，见下 |
 | `size` | `'portrait' \| 'landscape'?` | 画幅方向，缺省 `'portrait'`。具体像素取用户在渠道页配的尺寸。**用户在渠道里锁定了画幅方向时一律按锁定方向出图**，这里传什么都不算数（0.3.1 起） |
 | `seed` | `number?` | 指定种子（正整数）。省略 = 按用户设置决定 |
@@ -214,7 +214,7 @@ const result = await api.generate(
   {
     signal: controller.signal,
     onProgress: p => {
-      // 'queued' 在柏宝绘的 NAI 并发闸门里排队
+      // 'queued' 在柏宝绘的 NAI / Nightmare 客户端队列里排队
       // 'generating' 请求已发出，后端正在画
       // 'queued-remote' 在 ComfyUI 服务端队列里（p.ahead 为前面还有几个）
       // 'retrying' 被限流了，正在退避重试（p.attempt / p.max）

@@ -20,9 +20,9 @@ export interface ImageInsertion {
   sourceLine: number;
   /** danbooru 短 tag 部分(必填)。 */
   tag: string;
-  /** 自然语言部分(可空;ComfyUI「生成自然语言」开启时由模型一并输出)。 */
+  /** 自然语言部分(可空;ComfyUI / Nightmare「生成自然语言」开启时由模型一并输出)。 */
   nl: string;
-  /** 本画面动态负面 tag(可空;仅在 ComfyUI 工作流使用 %negative_prompt% 时要求模型输出)。 */
+  /** 本画面动态负面 tag(可空;Nightmare 与支持 negative_prompt 的 ComfyUI 工作流会要求模型输出)。 */
   negative: string;
   characters: ImageCharacterPrompt[];
   /** 画幅方向:模型只判横/竖,具体像素由用户在后端面板配置。漏给/乱给一律降级竖屏。 */

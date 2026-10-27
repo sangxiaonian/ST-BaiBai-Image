@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { generateComfyImage } from '@/backends/comfyui';
 import { generateNaiImage } from '@/backends/nai';
+import { generateNightmareImage } from '@/backends/nightmare';
 import { acquireNaiSlot } from '@/floor/genQueue';
 import { backendStatus, decideSeed, generateImage } from '@/generate';
 import { activeNaiEndpoint, newNaiEndpoint, settings, type NaiModel } from '@/state/settings';
@@ -14,6 +15,7 @@ vi.mock('@/backends/comfyui', async importOriginal => ({
   ...(await importOriginal<typeof import('@/backends/comfyui')>()),
   generateComfyImage: vi.fn(),
 }));
+vi.mock('@/backends/nightmare', () => ({ generateNightmareImage: vi.fn() }));
 vi.mock('@/floor/genQueue', () => ({ acquireNaiSlot: vi.fn() }));
 
 function fakeResult() {
@@ -33,6 +35,7 @@ beforeEach(() => {
   vi.mocked(acquireNaiSlot).mockResolvedValue(vi.fn());
   vi.mocked(generateNaiImage).mockResolvedValue(fakeNaiOutput());
   vi.mocked(generateComfyImage).mockResolvedValue(fakeResult());
+  vi.mocked(generateNightmareImage).mockResolvedValue(fakeResult());
 });
 
 /**
@@ -59,6 +62,22 @@ function comfyReady(): void {
   preset.mode = 'custom';
   preset.workflow = '{"1":{}}';
   preset.orientationLock = 'auto';
+}
+
+function nightmareReady(): void {
+  settings.defaultBackend = 'nightmare';
+  settings.nightmare.url = 'http://127.0.0.1:8820';
+  settings.nightmare.token = 'local-token';
+  settings.nightmare.model = 'moss';
+  settings.nightmare.qualityTags = 'high quality';
+  settings.nightmare.negativePrompt = 'watermark';
+  settings.nightmare.portraitSize = '832×1216';
+  settings.nightmare.landscapeSize = '1216×832';
+  settings.nightmare.steps = 24;
+  settings.nightmare.cfg = 5;
+  settings.nightmare.scheduler = 'euler';
+  settings.nightmare.seed = 123;
+  settings.nightmare.naturalLanguage = true;
 }
 
 describe('backendStatus', () => {
@@ -132,6 +151,15 @@ describe('backendStatus', () => {
     expect(backendStatus()).toMatchObject({ configured: true, supportsCharacters: false });
   });
 
+  it('recognizes configured Nightmare and does not support character prompts', () => {
+    nightmareReady();
+    expect(backendStatus()).toMatchObject({
+      backend: 'nightmare', model: 'moss', configured: true, supportsCharacters: false,
+    });
+    settings.nightmare.token = '';
+    expect(backendStatus()).toMatchObject({ configured: false, reason: '未填写 Nightmare API Token' });
+  });
+
   it('flags an unconfigured ComfyUI without pretending it can draw', () => {
     comfyReady();
     settings.comfyui.workflows[0].workflow = '  ';
@@ -156,6 +184,12 @@ describe('decideSeed', () => {
     expect(decideSeed('nai')).toBe(777);
     settings.nai.seed = 0;
     expect(decideSeed('nai')).not.toBe(0);
+  });
+
+  it('uses Nightmare fixed seed and clamps explicit seeds to the API range', () => {
+    nightmareReady();
+    expect(decideSeed('nightmare')).toBe(123);
+    expect(decideSeed('nightmare', 5000000000)).toBe(4294967295);
   });
 
   it.each([0, -1, NaN, undefined])('ignores %s as an override and still returns a usable seed', value => {
@@ -187,6 +221,29 @@ describe('generateImage', () => {
     comfyReady();
     await generateImage({ prompt: '1girl', seed: 1 });
     expect(vi.mocked(acquireNaiSlot)).not.toHaveBeenCalled();
+  });
+
+  it('dispatches Nightmare with fixed prompts, dimensions and sampling settings', async () => {
+    nightmareReady();
+    const output = await generateImage({ prompt: '1girl, moonlight', nl: 'A girl under the moon', negative: 'extra people', seed: 42 });
+    const [nightmareSettings, request, signal, onStart] = vi.mocked(generateNightmareImage).mock.calls[0];
+    expect(nightmareSettings).toBe(settings.nightmare);
+    expect(request).toEqual({
+      prompt: '1girl, moonlight',
+      nl: 'A girl under the moon',
+      negative: 'extra people',
+      seed: 42,
+      size: 'portrait',
+    });
+    expect(signal).toBeUndefined();
+    expect(onStart).toEqual(expect.any(Function));
+    expect(output).toMatchObject({ backend: 'nightmare', charactersApplied: false });
+    expect(output.meta).toMatchObject({
+      backend: 'nightmare', model: 'moss', width: 832, height: 1216,
+      positive: 'high quality, A girl under the moon',
+      negative: 'watermark, extra people',
+      params: { scheduler: 'euler', steps: 24, cfg: 5, quality: 'high quality' },
+    });
   });
 
   it('passes characters through untouched — nai.ts owns the model predicate', async () => {

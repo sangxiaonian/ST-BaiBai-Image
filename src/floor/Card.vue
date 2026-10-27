@@ -150,6 +150,7 @@ const retryInfo = computed(() => record.value?.retry ?? null);
 
 const comfyActive = computed(() => settings.defaultBackend === 'comfyui');
 const naiActive = computed(() => settings.defaultBackend === 'nai');
+const nightmareActive = computed(() => settings.defaultBackend === 'nightmare');
 /**
  * 后端是否已配齐(决定给「生成图片」按钮还是配置引导)。
  * 判据在 generate.ts 的 backendStatus 里,与真正出图、与公开接口同源——
@@ -249,8 +250,9 @@ const barText = computed(() => {
 
 /** 无图且后端未就绪时,占位区中央的配置引导。 */
 const pendingHint = computed(() => {
-  if (!comfyActive.value && !naiActive.value)
+  if (!comfyActive.value && !naiActive.value && !nightmareActive.value)
     return '出图后端未选择,请到柏宝绘「渠道」页选择出图渠道';
+  if (nightmareActive.value) return '未配置 Nightmare，请到柏宝绘「渠道」页填写服务地址、Token 并选择模型';
   return naiActive.value
     ? '未配置 NAI,请到柏宝绘「渠道」页填写 API Key'
     : '未配置 ComfyUI,请到柏宝绘「渠道」页填写工作流';
@@ -274,7 +276,7 @@ async function generate(): Promise<void> {
     size: effectiveSize.value,
   };
   // NAI 需要闸门排队 → 先显示「排队中」;ComfyUI 有服务端队列,直接进 generating
-  const { signal, token } = beginGen(slot, currentHash, naiActive.value ? 'queued' : 'generating');
+  const { signal, token } = beginGen(slot, currentHash, naiActive.value || nightmareActive.value ? 'queued' : 'generating');
   // 历史记录 id:在 seed 确定后才登记(见下),故这里先置空,catch 里据此判断要不要收尾。
   let historyId: number | null = null;
 
@@ -286,8 +288,8 @@ async function generate(): Promise<void> {
     // 且图随后就落盘进 ST 了)——只留元信息 + 楼层坐标,够回溯「这张图是怎么来的」。
     historyId = safeHistory(() =>
       beginImage({
-        backend: naiActive.value ? 'nai' : 'comfyui',
-        model: naiActive.value ? settings.nai.model : activeComfyPreset().name,
+        backend: naiActive.value ? 'nai' : nightmareActive.value ? 'nightmare' : 'comfyui',
+        model: naiActive.value ? settings.nai.model : nightmareActive.value ? settings.nightmare.model : activeComfyPreset().name,
         prompt: job.prompt,
         nl: job.nl,
         negative: job.negative,

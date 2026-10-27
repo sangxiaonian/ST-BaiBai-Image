@@ -71,7 +71,8 @@ function subtitle(record: HistoryRecord): string {
   if (record.kind === 'llm') {
     return [record.channelName, record.model].filter(Boolean).join(' · ');
   }
-  return [record.backend === 'nai' ? 'NAI' : 'ComfyUI', record.model].filter(Boolean).join(' · ');
+  const backendName = record.backend === 'nai' ? 'NAI' : record.backend === 'nightmare' ? 'Nightmare' : 'ComfyUI';
+  return [backendName, record.model].filter(Boolean).join(' · ');
 }
 
 /**

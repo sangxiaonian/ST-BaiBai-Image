@@ -78,13 +78,13 @@ export interface GenerationParams {
 
 /** 随图落盘的完整出图元信息。 */
 export interface GenerationMeta {
-  backend: 'nai' | 'comfyui';
-  /** NAI 模型名 / ComfyUI 工作流预设名。vibe 编码按模型分组，必须一起记。 */
+  backend: 'nai' | 'comfyui' | 'nightmare';
+  /** NAI / Nightmare 模型名 / ComfyUI 工作流预设名。vibe 编码按模型分组，必须一起记。 */
   model: string;
   /** 实际发给后端的画幅像素；0 = 由工作流自带尺寸（ComfyUI 未解析出时）。 */
   width: number;
   height: number;
-  /** 实际发送的完整正向词（NAI = 画师串 + tag + 质量词；ComfyUI 简易模式 = 固定正面 + 内容）。 */
+  /** 实际发送的完整正向词（各渠道按自身协议记录）。 */
   positive: string;
   /** 实际发送的负面词（拿不到时为空串，负面仍在 tag 文本里）。 */
   negative: string;

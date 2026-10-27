@@ -26,6 +26,7 @@ import type { ImageCharacterPrompt } from '@/autoTag/protocol';
 import { comfySimpleParams, composeNegative, composePositive, validateSimpleConfig, type SimpleGenValues } from '@/backends/comfyTemplates';
 import { generateComfyImage, randomSeed, type ComfyImageResult } from '@/backends/comfyui';
 import { generateNaiImage, naiRandomSeed, naiSupportsCharacterPrompts } from '@/backends/nai';
+import { generateNightmareImage } from '@/backends/nightmare';
 import { effectiveOrientation, parseSize, pickSize, type Orientation } from '@/backends/size';
 import { acquireNaiSlot } from '@/floor/genQueue';
 import type { GenerationMeta } from '@/generationMeta';
@@ -37,7 +38,7 @@ export interface GenerateInput {
   prompt: string;
   /** 自然语言部分(可空)。 */
   nl?: string;
-  /** 本画面动态负面(可空)。ComfyUI 走 %negative_prompt%;NAI 的负面取渠道配置,不吃这个。 */
+  /** 本画面动态负面(可空)。ComfyUI 与 Nightmare 使用；NAI 的负面取渠道配置。 */
   negative?: string;
   /** NAI 4.5/V5 原生多角色提示;ComfyUI 不支持(见 charactersApplied)。 */
   characters?: ImageCharacterPrompt[];
@@ -85,9 +86,9 @@ export interface GenerateOutput {
 export interface BackendStatus {
   backend: BackendId;
   configured: boolean;
-  /** NAI 为模型名;ComfyUI 为当前工作流预设名。 */
+  /** NAI / Nightmare 为模型名;ComfyUI 为当前工作流预设名。 */
   model: string;
-  /** 当前后端是否支持 characters(NAI 4.5/V5 为 true,ComfyUI 恒 false)。 */
+  /** 当前后端是否支持 characters(NAI 4.5/V5 为 true,ComfyUI / Nightmare 恒 false)。 */
   supportsCharacters: boolean;
   /** configured=false 时的人话原因;已就绪为空串。 */
   reason: string;
@@ -138,6 +139,14 @@ export function backendStatus(): BackendStatus {
     return { ...base, configured: true, reason: '' };
   }
 
+  if (backend === 'nightmare') {
+    const base = { backend, model: settings.nightmare.model, supportsCharacters: false };
+    if (!settings.nightmare.url.trim()) return { ...base, configured: false, reason: '未填写 Nightmare 服务地址' };
+    if (!settings.nightmare.token.trim()) return { ...base, configured: false, reason: '未填写 Nightmare API Token' };
+    if (!settings.nightmare.model.trim()) return { ...base, configured: false, reason: '未选择 Nightmare 模型' };
+    return { ...base, configured: true, reason: '' };
+  }
+
   // webui 只剩存量类型(设置迁移会把它归一成 comfyui/nai),真出现就是「没选后端」
   return {
     backend,
@@ -153,11 +162,18 @@ export function backendStatus(): BackendStatus {
  * 二是埋点与落盘(entry.seed)都要记下它,事后「同种子再来一张」才有依据。
  *
  * 口径:显式指定 > NAI 面板固定种子(>0)> 随机。
- * NAI 与 ComfyUI 的随机上界不同(各自协议的合法范围),故分开取。
+ * NAI / Nightmare 与 ComfyUI 的随机上界不同(各自协议的合法范围),故分开取。
  */
 export function decideSeed(backend: BackendId, override?: number): number {
-  if (override !== undefined && Number.isFinite(override) && override > 0) return Math.floor(override);
+  if (override !== undefined && Number.isFinite(override) && override > 0) {
+    return Math.floor(backend === 'nightmare' ? Math.min(4294967295, override) : override);
+  }
   if (backend === 'nai') return settings.nai.seed > 0 ? settings.nai.seed : naiRandomSeed();
+  if (backend === 'nightmare') {
+    return settings.nightmare.seed > 0
+      ? settings.nightmare.seed
+      : Math.floor(Math.random() * 2 ** 32);
+  }
   return randomSeed();
 }
 
@@ -181,6 +197,7 @@ export async function generateImage(
   if (!status.configured) throw new Error(status.reason || '出图后端未配置');
 
   const isNai = status.backend === 'nai';
+  const isNightmare = status.backend === 'nightmare';
   const characters = input.characters ?? [];
   // 支持与否由后端说了算:ComfyUI 恒不支持;NAI 看模型是否 4.5/V5
   const charactersApplied = characters.length > 0 && status.supportsCharacters;
@@ -189,7 +206,7 @@ export async function generateImage(
   try {
     // 持槽:取到槽位后本函数内一直持有,直到 finally 释放
     if (isNai) release = await acquireNaiSlot(signal);
-    progress.onStart?.();
+    if (isNai) progress.onStart?.();
 
     // 画幅锁在这里统一生效(卡片与公开接口同走本函数):只决定这一次用哪格尺寸,
     // tag 里记的方向原样不动——promptHash 吃 tag 原文,改写会让老图无辜变 stale。
@@ -207,7 +224,37 @@ export async function generateImage(
       );
       result = output.result;
       meta = { backend: 'nai', model: status.model, ...output.usage };
+    } else if (isNightmare) {
+      const output = await generateNightmareImage(
+        settings.nightmare,
+        { prompt: input.prompt, nl: input.nl, negative: input.negative, seed: input.seed, size },
+        signal,
+        () => progress.onStart?.(),
+      );
+      result = output;
+      const dimensions = parseSize(pickSize(settings.nightmare, size));
+      const positive = [settings.nightmare.qualityTags.trim(), input.nl?.trim() || input.prompt]
+        .filter(Boolean)
+        .join(', ');
+      const negative = [settings.nightmare.negativePrompt.trim(), input.negative?.trim()].filter(Boolean).join(', ');
+      meta = {
+        backend: 'nightmare',
+        model: status.model,
+        width: dimensions?.width ?? 0,
+        height: dimensions?.height ?? 0,
+        positive,
+        negative,
+        artist: null,
+        vibes: [],
+        params: {
+          ...(settings.nightmare.scheduler.trim() ? { scheduler: settings.nightmare.scheduler.trim() } : {}),
+          ...(settings.nightmare.steps > 0 ? { steps: settings.nightmare.steps } : {}),
+          ...(settings.nightmare.cfg > 0 ? { cfg: settings.nightmare.cfg } : {}),
+          ...(settings.nightmare.qualityTags.trim() ? { quality: settings.nightmare.qualityTags.trim() } : {}),
+        },
+      };
     } else {
+      progress.onStart?.();
       const conn = effectiveComfyConn();
       result = await generateComfyImage(
         conn,

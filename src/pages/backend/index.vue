@@ -3,6 +3,7 @@ import { BACKENDS, settings, type BackendId } from '@/state/settings';
 import { computed, ref, watch, type Component } from 'vue';
 import ComfyUIPanel from './panels/ComfyUIPanel.vue';
 import NaiPanel from './panels/NaiPanel.vue';
+import NightmarePanel from './panels/NightmarePanel.vue';
 import WebUIPanel from './panels/WebUIPanel.vue';
 
 // 渠道页:页签只负责「看哪个面板」(纯浏览,本地状态,初始跟随当前出图渠道)。
@@ -44,6 +45,7 @@ const PANELS: Record<BackendId, Component> = {
   webui: WebUIPanel,
   comfyui: ComfyUIPanel,
   nai: NaiPanel,
+  nightmare: NightmarePanel,
 };
 const activePanel = computed(() => PANELS[viewing.value]);
 </script>

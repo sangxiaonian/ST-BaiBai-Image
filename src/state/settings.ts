@@ -27,11 +27,12 @@ import { reactive, watch } from 'vue';
  */
 
 /** 生图后端 */
-export type BackendId = 'webui' | 'comfyui' | 'nai';
+export type BackendId = 'webui' | 'comfyui' | 'nai' | 'nightmare';
 // 顺序即展示顺序(渠道页页签 / 设置页出图后端下拉):NAI 用户最多,排最前;webui 隐藏但保留。
 export const BACKENDS: { value: BackendId; label: string }[] = [
   { value: 'nai', label: 'NAI' },
   { value: 'comfyui', label: 'ComfyUI' },
+  { value: 'nightmare', label: 'Nightmare' },
   { value: 'webui', label: 'WebUI' },
 ];
 
@@ -101,6 +102,19 @@ export interface ComfyUISettings extends BackendConn {
   workflows: ComfyWorkflowPreset[];
   /** 当前使用的工作流 id;指向已删条目时由 normalize 回落到第一条。 */
   activeWorkflowId: string;
+}
+
+/** Nightmare Mobile 本地文生图 API 配置。 */
+export interface NightmareSettings extends BackendConn {
+  token: string;
+  model: string;
+  steps: number;
+  cfg: number;
+  scheduler: string;
+  /** 固定种子；0 = 每次随机。 */
+  seed: number;
+  /** 是否要求自动 tag 的 LLM 同时生成自然语言描述。 */
+  naturalLanguage: boolean;
 }
 
 /**
@@ -1032,6 +1046,7 @@ export interface ImageSettings {
   webui: BackendConn;
   comfyui: ComfyUISettings;
   nai: NaiSettings;
+  nightmare: NightmareSettings;
   /** 副 API 渠道列表(镜像共享存储;真身在 extensionSettings['baibai_api_channels']) */
   channels: ApiChannel[];
   /** 任务指派的渠道 id。tagGen=生成画图 tag;空串=跟随主 API。 */
@@ -1108,6 +1123,19 @@ function comfyDefaults(): ComfyUISettings {
   };
 }
 
+function nightmareDefaults(): NightmareSettings {
+  return {
+    ...backendDefaults('http://127.0.0.1:8820'),
+    token: '',
+    model: '',
+    steps: 24,
+    cfg: 5,
+    scheduler: '',
+    seed: 0,
+    naturalLanguage: true,
+  };
+}
+
 /** 新画师串的默认名。 */
 const DEFAULT_ARTIST_NAME = '画师串 1';
 
@@ -1181,11 +1209,12 @@ function defaults(): ImageSettings {
       autoCollapseImages: false,
       imageDisplaySize: 'medium',
     },
-    // 出图后端默认 ComfyUI(当前唯一实现的出图后端);webui 渠道已隐藏,不再作为可选值
+    // 默认仍为 ComfyUI;Nightmare 与 NAI 需用户主动配置后选择。
     defaultBackend: 'comfyui',
     webui: backendDefaults('http://127.0.0.1:7860'),
     comfyui: comfyDefaults(),
     nai: naiDefaults(),
+    nightmare: nightmareDefaults(),
     channels: [],
     assignments: { tagGen: '' },
     autoTag: {
@@ -1681,6 +1710,21 @@ function normalizeNai(raw: unknown, def: NaiSettings): NaiSettings {
   };
 }
 
+function normalizeNightmare(raw: unknown, def: NightmareSettings): NightmareSettings {
+  const conn = normalizeBackend(raw, def);
+  const o = (raw ?? {}) as Partial<NightmareSettings>;
+  return {
+    ...conn,
+    token: typeof o.token === 'string' ? o.token : def.token,
+    model: typeof o.model === 'string' ? o.model : def.model,
+    steps: Math.round(clampNumber(o.steps, def.steps, 0, 100)),
+    cfg: clampNumber(o.cfg, def.cfg, 0, 50),
+    scheduler: typeof o.scheduler === 'string' ? o.scheduler : def.scheduler,
+    seed: Math.round(clampNumber(o.seed, def.seed, 0, 4294967295)),
+    naturalLanguage: typeof o.naturalLanguage === 'boolean' ? o.naturalLanguage : def.naturalLanguage,
+  };
+}
+
 /**
  * 把用户输入规整成可安全拼进正则的标签名(与柏宝书 settings.ts 的 sanitizeTagName 同口径)。
  * 用黑名单(而非白名单)剔除会破坏标签语法/正则的危险字符:尖括号、斜杠、空白、正则元字符;
@@ -1759,12 +1803,13 @@ function normalize(raw: unknown): ImageSettings {
   };
   // webui 已隐藏:存量数据里的 'webui' 一律迁移到默认后端(否则规范/出图口径会落空)
   merged.defaultBackend =
-    merged.defaultBackend === 'comfyui' || merged.defaultBackend === 'nai'
+    merged.defaultBackend === 'comfyui' || merged.defaultBackend === 'nai' || merged.defaultBackend === 'nightmare'
       ? merged.defaultBackend
       : d.defaultBackend;
   merged.webui = normalizeBackend(r.webui, d.webui);
   merged.comfyui = normalizeComfyUI(r.comfyui, d.comfyui);
   merged.nai = normalizeNai(r.nai, d.nai);
+  merged.nightmare = normalizeNightmare(r.nightmare, d.nightmare);
   // 副 API 渠道:逐个补全字段并校验类型
   merged.channels = (Array.isArray(r.channels) ? r.channels : []).map(normalizeChannel);
   // 任务指派:嵌套对象,逐字段兜底(老数据没有 assignments 键时回退空串=跟随主 API)
@@ -1848,6 +1893,7 @@ function applyInto(target: ImageSettings, src: ImageSettings): void {
   target.webui = src.webui;
   target.comfyui = src.comfyui;
   target.nai = src.nai;
+  target.nightmare = src.nightmare;
   target.channels = src.channels;
   target.assignments = src.assignments;
   target.autoTag = src.autoTag;

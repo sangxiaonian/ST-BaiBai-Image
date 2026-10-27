@@ -41,7 +41,7 @@ export interface AutoTagProfile {
   /** NAI 4.5/V5:Base + 原生 Character Prompts(characters[])。 */
   naiCharPrompts: boolean;
   /**
-   * 协议含 nl:ComfyUI 当前工作流开了「生成自然语言」,或 NAI 4.5/V5 开了「生成自然语言」。
+  * 协议含 nl:ComfyUI / Nightmare 开了「生成自然语言」,或 NAI 4.5/V5 开了该选项。
    * 两个开关同一口径,只管 AI 写不写;已写进 tag 的 nl 照常发送。
    */
   nl: boolean;
@@ -56,6 +56,8 @@ export function autoTagProfile(): AutoTagProfile {
   const nl =
     backend === 'comfyui'
       ? activeComfyPreset().naturalLanguage
+      : backend === 'nightmare'
+        ? settings.nightmare.naturalLanguage
       : naiCharPrompts && settings.nai.naturalLanguage;
   const lock = activeOrientationLock();
   return { naiCharPrompts, nl, lockedSize: lock === 'auto' ? null : lock };
@@ -77,14 +79,14 @@ export function expandNlSections(text: string, nlOn: boolean): string {
 
 /**
  * 按默认后端取 tag 书写规范:
- * - comfyui → comfySpec(留空回落内置默认);{{nl}} 宏按自然语言开关展开/置空,
+ * - comfyui / nightmare → comfySpec(留空回落内置默认);{{nl}} 宏按自然语言开关展开/置空,
  *   自定义内容不含宏时开启开关会把自然语言规范追加在末尾(防止开关静默失效)。
  * - nai → 4.5/V5 取 naiV5Spec、其余模型取 naiSpec(留空各自回落内置默认)。
  * - webui → 暂不附加。
  * 两个后端都先展开自然语言条件段(expandNlSections)。
  */
 function backendPromptSpec(options: AutoTagSettings, nlOn: boolean, naiCharPromptsOn: boolean): string {
-  if (settings.defaultBackend === 'comfyui') {
+  if (settings.defaultBackend === 'comfyui' || settings.defaultBackend === 'nightmare') {
     const template = expandNlSections((options.prompts?.comfySpec ?? '').trim() || DEFAULT_COMFY_SPEC, nlOn);
     const nlSpec = nlOn ? DEFAULT_COMFY_NL_SPEC : '';
     const resolved = template.includes('{{nl}}')
@@ -186,10 +188,11 @@ export async function buildAutoTagMessages(
     Promise.resolve(fetchUserPersona(context)),
   ]);
 
-  // 自然语言模式(profile.nl):ComfyUI 当前工作流或 NAI 渠道开启了「生成自然语言」。
+  // 自然语言模式(profile.nl):ComfyUI 当前工作流、Nightmare 渠道或 NAI 开启了「生成自然语言」。
   // 开启后协议变为 tag/nl 两键——自然语言是配合短 tag 用的,不是替代。
   // 动态负面词同样取自当前预设:切工作流即同时切走自然语言与动态负面词的口径。
   const comfyOn = settings.defaultBackend === 'comfyui';
+  const nightmareOn = settings.defaultBackend === 'nightmare';
   const naiCharPromptsOn = profile.naiCharPrompts;
   const comfyPreset = comfyOn ? activeComfyPreset() : null;
   const nlOn = profile.nl;
@@ -207,6 +210,7 @@ export async function buildAutoTagMessages(
       }
     }
   }
+  if (nightmareOn) negativeOn = true;
   // 示例一律写实际外貌串:@占位符已撤回(见 charAnchors.ts 文件头),
   // 有库/无库的差别只在「照抄库中字段」还是「自行补基础特征」,示例形态相同。
   const sampleTag = library

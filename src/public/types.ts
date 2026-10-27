@@ -91,11 +91,11 @@ export interface PublicBackendStatus {
   backend: BackendId;
   /** 后端是否已配齐、能出图。false 时 generate 会抛 code='not_configured'。 */
   configured: boolean;
-  /** NAI 为模型名;ComfyUI 为当前工作流预设名。**不含服务地址与 API Key。** */
+  /** NAI / Nightmare 为模型名;ComfyUI 为当前工作流预设名。**不含服务地址与密钥。** */
   model: string;
   /**
    * 当前后端是否支持 characters(多角色提示)。
-   * NAI 4.5/V5 为 true;**ComfyUI 恒为 false**——传了会被静默丢弃,
+  * NAI 4.5/V5 为 true;ComfyUI 与 Nightmare 恒为 false——传了会被静默丢弃,
    * 故要画多角色时请先看这里,别等出图完才发现。
    */
   supportsCharacters: boolean;
