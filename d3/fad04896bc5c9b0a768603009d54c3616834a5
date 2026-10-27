@@ -1,0 +1,42 @@
+src/generate.test.ts
+  s_5e369e4bbf61a2::t_93d08a39618a79 69,250-264
+src/generate.ts
+  s_5e369e4bbf61a2::t_6cf7cfbb5ef9ac 143-144,147,236-237,252-255
+src/backends/nightmare.test.ts
+  s_5e369e4bbf61a2::t_495bb626fa3df8 13,37-52
+src/pages/backend/panels/NightmarePanel.vue
+  s_5e369e4bbf61a2::t_495bb626fa3df8 120-131,138,163
+src/state/settings.ts
+  s_5e369e4bbf61a2::t_6cf7cfbb5ef9ac 109-110,1131,1721
+README.md
+  s_5e369e4bbf61a2::t_93d08a39618a79 31
+src/state/settings.nightmareMigration.test.ts
+  s_5e369e4bbf61a2::t_495bb626fa3df8 44,59-64
+dist/index.js
+  s_5e369e4bbf61a2::t_7e7f4695e280ab 1-2,452-453,455-456,482-484,486,500-501,503-506,509,511,513,516-517,520-521,523,528,531,534,537,540,544-545,547,582,585,592-594,596,1279,1503-1504,1511,1513,1520,1524
+src/backends/nightmare.ts
+  s_5e369e4bbf61a2::t_6cf7cfbb5ef9ac 190,214,218-222,226
+  s_5e369e4bbf61a2::t_495bb626fa3df8 223-225
+dist/index.css
+  s_5e369e4bbf61a2::t_7e7f4695e280ab 1
+src/generationMeta.ts
+  s_5e369e4bbf61a2::t_93d08a39618a79 131-133
+dist/index.js.map
+  s_5e369e4bbf61a2::t_e81251e3044436 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d3fad04896bc5c9b0a768603009d54c3616834a5",
+  "prompts": {},
+  "sessions": {
+    "s_5e369e4bbf61a2": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "943f38f9-9616-4fbf-9904-9e5b18980d4e",
+        "model": "copilot/gpt-6.1-sol"
+      },
+      "human_author": "swdwte <Yapeng_Ping@SAIC-GM.com>"
+    }
+  }
+}
