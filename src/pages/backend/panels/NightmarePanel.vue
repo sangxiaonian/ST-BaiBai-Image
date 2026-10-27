@@ -117,14 +117,25 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
         </div>
       </Collapsible>
 
-      <Collapsible title="模型与固定参数" :open="true">
+      <Collapsible title="生成模式与提示词" :open="true">
+        <label class="bbi-field">
+          <span class="bbi-field-label">生成模式</span>
+          <select v-model="settings.nightmare.mode" class="bbi-input bbi-select">
+            <option value="txt2img">文生图（使用柏宝绘面板参数）</option>
+            <option value="current">当前画布（仅提供正负面提示词）</option>
+          </select>
+        </label>
+        <p v-if="settings.nightmare.mode === 'current'" class="bbi-field-hint">
+          请先在 Nightmare 准备好当前画布。柏宝绘只替换所有 Prompt 节点的正负面词，不发送模型、尺寸、步数、CFG、调度器、种子或 LoRA 设置。
+          随机或锁定种子均由画布决定，柏宝绘的种子记录和「同种子」操作不用于复现；实际模型与采样参数不从本面板记录。API 结果仍不会自动加入 Nightmare Results。
+        </p>
         <div v-if="comfyAnimaPreset" class="prompt-copy-row">
           <span class="bbi-field-hint">可复用当前 ComfyUI Anima 预设的固定正负面词；复制后 Nightmare 保留独立副本。</span>
           <button class="bbi-btn bbi-btn-sm" type="button" @click="copyComfyAnimaPrompts">
             复制 ComfyUI 固定词
           </button>
         </div>
-        <div class="bbi-field">
+        <div v-if="settings.nightmare.mode !== 'current'" class="bbi-field">
           <div class="bbi-field-head">
             <span class="bbi-field-label">模型</span>
             <button class="bbi-btn bbi-btn-sm" type="button" :disabled="loadingModels" @click="refreshModels()">
@@ -149,7 +160,7 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
           <div class="bbi-field-head"><span class="bbi-field-label">固定负面提示词</span></div>
           <textarea v-model="settings.nightmare.negativePrompt" class="bbi-input bbi-textarea" rows="3" placeholder="每次生成时与画面动态负面词合并" />
         </div>
-        <div class="be-grid">
+        <div v-if="settings.nightmare.mode !== 'current'" class="be-grid">
           <label class="bbi-field"><span class="bbi-field-label">竖屏尺寸</span><input v-model="settings.nightmare.portraitSize" class="bbi-input" placeholder="832×1216" /></label>
           <label class="bbi-field"><span class="bbi-field-label">横屏尺寸</span><input v-model="settings.nightmare.landscapeSize" class="bbi-input" placeholder="1216×832" /></label>
           <label class="bbi-field"><span class="bbi-field-label">步数（0 使用模型默认）</span><input v-model.number="settings.nightmare.steps" class="bbi-input" type="number" min="0" max="100" /></label>

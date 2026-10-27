@@ -106,6 +106,8 @@ export interface ComfyUISettings extends BackendConn {
 
 /** Nightmare Mobile 本地文生图 API 配置。 */
 export interface NightmareSettings extends BackendConn {
+  /** current 仅替换提示词，其余配置由 Nightmare 当前画布决定。 */
+  mode: 'txt2img' | 'current';
   token: string;
   model: string;
   steps: number;
@@ -1126,6 +1128,7 @@ function comfyDefaults(): ComfyUISettings {
 function nightmareDefaults(): NightmareSettings {
   return {
     ...backendDefaults('http://127.0.0.1:8820'),
+    mode: 'txt2img',
     token: '',
     model: '',
     steps: 24,
@@ -1715,6 +1718,7 @@ function normalizeNightmare(raw: unknown, def: NightmareSettings): NightmareSett
   const o = (raw ?? {}) as Partial<NightmareSettings>;
   return {
     ...conn,
+    mode: o.mode === 'current' ? 'current' : 'txt2img',
     token: typeof o.token === 'string' ? o.token : def.token,
     model: typeof o.model === 'string' ? o.model : def.model,
     steps: Math.round(clampNumber(o.steps, def.steps, 0, 100)),

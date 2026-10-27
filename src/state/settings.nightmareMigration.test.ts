@@ -41,6 +41,7 @@ describe('Nightmare settings migration', () => {
 
     expect(settings.defaultBackend).toBe('nightmare');
     expect(settings.nightmare).toMatchObject({
+      mode: 'txt2img',
       url: 'http://127.0.0.1:8820/',
       token: 'local-token',
       model: 'moss-image',
@@ -54,6 +55,12 @@ describe('Nightmare settings migration', () => {
       naturalLanguage: false,
     });
   }, 15_000);
+
+  it('preserves the current canvas mode without requiring a model', async () => {
+    const settings = await hydrate({ nightmare: { mode: 'current', model: '' } });
+    expect(settings.nightmare.mode).toBe('current');
+    expect(settings.nightmare.model).toBe('');
+  });
 
   it('keeps legacy WebUI disabled and migrates it to the default backend', async () => {
     const settings = await hydrate({ defaultBackend: 'webui' });

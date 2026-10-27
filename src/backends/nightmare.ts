@@ -187,7 +187,7 @@ export async function generateNightmareImage(
 ): Promise<ComfyImageResult> {
   if (!settings.url.trim()) throw new NightmareError('请先填写 Nightmare 服务地址');
   if (!settings.token.trim()) throw new NightmareError('请先填写 Nightmare API Token');
-  if (!settings.model.trim()) throw new NightmareError('请先选择 Nightmare 模型');
+  if (settings.mode !== 'current' && !settings.model.trim()) throw new NightmareError('请先选择 Nightmare 模型');
   if (!values.prompt.trim()) throw new NightmareError('正向提示词不能为空');
   if (signal?.aborted) throw signal.reason ?? new DOMException('已取消', 'AbortError');
 
@@ -211,17 +211,19 @@ async function runNightmareImage(
   const prompt = [settings.qualityTags.trim(), generatedPrompt].filter(Boolean).join(', ');
   const negative = [settings.negativePrompt.trim(), values.negative?.trim()].filter(Boolean).join(', ');
   const body: Record<string, unknown> = {
-    flow: 'txt2img',
-    model: settings.model,
+    flow: settings.mode === 'current' ? 'current' : 'txt2img',
     prompt,
     negative,
-    seed: values.seed,
-    width: dimensions?.width,
-    height: dimensions?.height,
   };
-  if (Number.isFinite(settings.steps) && settings.steps > 0) body.steps = Math.min(100, Math.max(1, Math.round(settings.steps)));
-  if (Number.isFinite(settings.cfg) && settings.cfg > 0) body.cfg = Math.min(50, settings.cfg);
-  if (settings.scheduler.trim()) body.scheduler = settings.scheduler.trim();
+  if (settings.mode !== 'current') {
+    body.model = settings.model;
+    body.seed = values.seed;
+    body.width = dimensions?.width;
+    body.height = dimensions?.height;
+    if (Number.isFinite(settings.steps) && settings.steps > 0) body.steps = Math.min(100, Math.max(1, Math.round(settings.steps)));
+    if (Number.isFinite(settings.cfg) && settings.cfg > 0) body.cfg = Math.min(50, settings.cfg);
+    if (settings.scheduler.trim()) body.scheduler = settings.scheduler.trim();
+  }
 
   const root = baseUrl(settings.url);
   const cancel = () => {

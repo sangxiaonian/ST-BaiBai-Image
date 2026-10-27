@@ -10,6 +10,7 @@ import type { NightmareSettings } from '@/state/settings';
 
 function nightmare(overrides: Partial<NightmareSettings> = {}): NightmareSettings {
   return {
+    mode: 'txt2img',
     url: 'http://127.0.0.1:8820',
     token: 'secret-token',
     model: 'model-a',
@@ -33,6 +34,22 @@ afterEach(() => {
 });
 
 describe('Nightmare API', () => {
+  it('runs the current canvas with only prompts and without a selected model or sampling overrides', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ url: '/out.png' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(new Blob(['png'], { type: 'image/png' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await generateNightmareImage(nightmare({ mode: 'current', model: '' }), {
+      prompt: 'a quiet garden', negative: 'people', seed: 42, size: 'landscape',
+    });
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      flow: 'current',
+      prompt: 'high quality, a quiet garden',
+      negative: 'watermark, people',
+    });
+    result.revoke();
+  });
+
   it('tests the local API and reads installed model ids with bearer authentication', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ rendering: false }), { status: 200 }))

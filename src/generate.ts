@@ -140,10 +140,11 @@ export function backendStatus(): BackendStatus {
   }
 
   if (backend === 'nightmare') {
-    const base = { backend, model: settings.nightmare.model, supportsCharacters: false };
+    const canvas = settings.nightmare.mode === 'current';
+    const base = { backend, model: canvas ? 'Nightmare 当前画布（模型由画布决定）' : settings.nightmare.model, supportsCharacters: false };
     if (!settings.nightmare.url.trim()) return { ...base, configured: false, reason: '未填写 Nightmare 服务地址' };
     if (!settings.nightmare.token.trim()) return { ...base, configured: false, reason: '未填写 Nightmare API Token' };
-    if (!settings.nightmare.model.trim()) return { ...base, configured: false, reason: '未选择 Nightmare 模型' };
+    if (!canvas && !settings.nightmare.model.trim()) return { ...base, configured: false, reason: '未选择 Nightmare 模型' };
     return { ...base, configured: true, reason: '' };
   }
 
@@ -232,7 +233,8 @@ export async function generateImage(
         () => progress.onStart?.(),
       );
       result = output;
-      const dimensions = parseSize(pickSize(settings.nightmare, size));
+      const canvas = settings.nightmare.mode === 'current';
+      const dimensions = canvas ? null : parseSize(pickSize(settings.nightmare, size));
       const positive = [settings.nightmare.qualityTags.trim(), input.nl?.trim() || input.prompt]
         .filter(Boolean)
         .join(', ');
@@ -247,9 +249,10 @@ export async function generateImage(
         artist: null,
         vibes: [],
         params: {
-          ...(settings.nightmare.scheduler.trim() ? { scheduler: settings.nightmare.scheduler.trim() } : {}),
-          ...(settings.nightmare.steps > 0 ? { steps: settings.nightmare.steps } : {}),
-          ...(settings.nightmare.cfg > 0 ? { cfg: settings.nightmare.cfg } : {}),
+          mode: canvas ? 'current' : 'txt2img',
+          ...(!canvas && settings.nightmare.scheduler.trim() ? { scheduler: settings.nightmare.scheduler.trim() } : {}),
+          ...(!canvas && settings.nightmare.steps > 0 ? { steps: settings.nightmare.steps } : {}),
+          ...(!canvas && settings.nightmare.cfg > 0 ? { cfg: settings.nightmare.cfg } : {}),
           ...(settings.nightmare.qualityTags.trim() ? { quality: settings.nightmare.qualityTags.trim() } : {}),
         },
       };

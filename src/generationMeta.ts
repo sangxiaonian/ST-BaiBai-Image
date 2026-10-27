@@ -128,6 +128,9 @@ export function formatGenerationMeta(meta: GenerationMeta): string {
     lines.push(`Vibe: ${meta.vibes.map(formatVibe).join('、')}`);
   }
   lines.push(`模型: ${meta.model}`);
+  if (meta.backend === 'nightmare' && meta.params.mode === 'current') {
+    lines.push('当前画布模式: 仅发送正负面提示词；模型、尺寸、采样及种子由 Nightmare 画布决定，柏宝绘记录的种子未发送。');
+  }
   if (meta.width > 0 && meta.height > 0) {
     lines.push(`尺寸: ${meta.width}×${meta.height}`);
   }

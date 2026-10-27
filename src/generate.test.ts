@@ -66,6 +66,7 @@ function comfyReady(): void {
 
 function nightmareReady(): void {
   settings.defaultBackend = 'nightmare';
+  settings.nightmare.mode = 'txt2img';
   settings.nightmare.url = 'http://127.0.0.1:8820';
   settings.nightmare.token = 'local-token';
   settings.nightmare.model = 'moss';
@@ -244,6 +245,21 @@ describe('generateImage', () => {
       negative: 'watermark, extra people',
       params: { scheduler: 'euler', steps: 24, cfg: 5, quality: 'high quality' },
     });
+  });
+
+  it('allows the current canvas without a model and does not record unused panel parameters', async () => {
+    nightmareReady();
+    settings.nightmare.mode = 'current';
+    settings.nightmare.model = '';
+    expect(backendStatus().configured).toBe(true);
+    const output = await generateImage({ prompt: 'a quiet garden', seed: 42 });
+    expect(output.meta).toMatchObject({
+      backend: 'nightmare', width: 0, height: 0,
+      params: { mode: 'current', quality: 'high quality' },
+    });
+    expect(output.meta?.params).not.toHaveProperty('steps');
+    expect(output.meta?.params).not.toHaveProperty('cfg');
+    expect(output.meta?.params).not.toHaveProperty('scheduler');
   });
 
   it('passes characters through untouched — nai.ts owns the model predicate', async () => {
