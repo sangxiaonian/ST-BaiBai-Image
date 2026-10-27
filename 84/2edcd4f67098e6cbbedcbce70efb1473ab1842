@@ -1,0 +1,32 @@
+dist/index.js
+  s_5e369e4bbf61a2::t_f282de41987ae7 1-2,452-456,482-484,486,500-501,503-506,509,511,513,515-517,520-521,523,528-529,531,534,537,540,544-545,547,549,556,558,569,572,574-575,582,585,591-594,596,1279,1503-1504,1506,1511,1513,1520,1524
+src/backends/nightmare.test.ts
+  s_5e369e4bbf61a2::t_840961ac8f9868 3-8,39-44,48-51,54
+src/pages/backend/panels/NightmarePanel.vue
+  s_5e369e4bbf61a2::t_1ec206d95ef928 2-7,17,19,37-50,58-59,76-77,134,157-168
+src/update.ts
+  s_5e369e4bbf61a2::t_0f95ce583da043 11
+dist/index.css
+  s_5e369e4bbf61a2::t_f282de41987ae7 1
+src/backends/nightmare.ts
+  s_5e369e4bbf61a2::t_c4035316a635fa 16,99-104,122-146
+  s_5e369e4bbf61a2::t_223a4b3048a518 247,249,252
+dist/index.js.map
+  s_5e369e4bbf61a2::t_a9662b16e3f11d 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "842edcd4f67098e6cbbedcbce70efb1473ab1842",
+  "prompts": {},
+  "sessions": {
+    "s_5e369e4bbf61a2": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "943f38f9-9616-4fbf-9904-9e5b18980d4e",
+        "model": "copilot/gpt-6-luna"
+      },
+      "human_author": "swdwte <Yapeng_Ping@SAIC-GM.com>"
+    }
+  }
+}
