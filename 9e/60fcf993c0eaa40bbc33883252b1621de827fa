@@ -1,0 +1,70 @@
+src/floor/Card.vue
+  s_5e369e4bbf61a2::t_0a372903189a29 153,253,255,279,291-292
+src/autoTag/protocol.ts
+  s_5e369e4bbf61a2::t_55b4cf18694627 23,25
+src/pages/history/index.vue
+  s_5e369e4bbf61a2::t_332b41da6b35d1 74-75
+dist/index.js
+  s_5e369e4bbf61a2::t_8b6a45e1d45b88 517,520-521,523,526,528-529,531,534,537,540,544-545,547,549,552,556,558-559,569,572,574-575,582-1504,1506,1511,1513,1520,1524
+  s_5e369e4bbf61a2::t_ba70cae594bec5 1-2,28,102,110,178,245,312,397,452-456,482-484,486,500-501,503-506,509,511,513,515-516
+src/generationMeta.ts
+  s_5e369e4bbf61a2::t_332b41da6b35d1 81
+  s_5e369e4bbf61a2::t_98949e10be0f60 82,87
+PUBLIC_API.md
+  s_5e369e4bbf61a2::t_98949e10be0f60 217
+  s_5e369e4bbf61a2::t_e9bb4185ceb262 124,126,134,156
+README.md
+  s_5e369e4bbf61a2::t_0a372903189a29 25,65
+  s_5e369e4bbf61a2::t_55b4cf18694627 30
+src/generate.test.ts
+  s_5e369e4bbf61a2::t_c2cdb891e0095f 232-233
+  s_5e369e4bbf61a2::t_faa4c088ee3504 229-231,234-239
+  s_5e369e4bbf61a2::t_4b93a61e66c37e 5,18,38,67-82,154-162,189-194,226-228,240-242,244-248
+  s_5e369e4bbf61a2::t_509b60cd1f1aa2 243
+src/public/types.ts
+  s_5e369e4bbf61a2::t_0a372903189a29 94,98
+package.json
+  s_5e369e4bbf61a2::t_65cedf05b850e4 3
+manifest.json
+  s_5e369e4bbf61a2::t_8b6a45e1d45b88 6,8
+src/generate.ts
+  s_5e369e4bbf61a2::t_90e7549089c949 209,232,257
+  s_5e369e4bbf61a2::t_332b41da6b35d1 29,142-149,168-170,172-176,200,227-229,231,233-235,237-255
+  s_5e369e4bbf61a2::t_98949e10be0f60 41,89,91,165
+  s_5e369e4bbf61a2::t_c2cdb891e0095f 230,236
+src/public/api.ts
+  s_5e369e4bbf61a2::t_332b41da6b35d1 261
+  s_5e369e4bbf61a2::t_98949e10be0f60 260
+src/pages/backend/index.vue
+  s_5e369e4bbf61a2::t_0a372903189a29 6,48
+src/autoTag/prompt.ts
+  s_5e369e4bbf61a2::t_55b4cf18694627 44,82,191
+  s_5e369e4bbf61a2::t_332b41da6b35d1 59-60,89,195,213
+src/state/settings.ts
+  s_5e369e4bbf61a2::t_332b41da6b35d1 30,35,107-115,117-119,1049,1126-1138,1217,1713-1727,1806,1812,1896
+  s_5e369e4bbf61a2::t_913ebbb3cf8717 116
+  s_5e369e4bbf61a2::t_e9bb4185ceb262 1212
+src/state/history.ts
+  s_5e369e4bbf61a2::t_98949e10be0f60 74,226
+  s_5e369e4bbf61a2::t_332b41da6b35d1 73
+dist/index.css
+  s_5e369e4bbf61a2::t_81af56a0888a44 1
+dist/index.js.map
+  s_5e369e4bbf61a2::t_5d9527c453e3fd 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "9e60fcf993c0eaa40bbc33883252b1621de827fa",
+  "prompts": {},
+  "sessions": {
+    "s_5e369e4bbf61a2": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "943f38f9-9616-4fbf-9904-9e5b18980d4e",
+        "model": "copilot/gpt-6-luna"
+      },
+      "human_author": null
+    }
+  }
+}
