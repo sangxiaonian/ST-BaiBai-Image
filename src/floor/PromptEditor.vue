@@ -351,7 +351,7 @@ onBeforeUnmount(() => {
 
       <div class="bbi-modal-field">
         <span class="bbi-modal-label">
-          角色提示词(多角色;仅 NAI 后端发送)
+          角色提示词(NAI 原生发送;Nightmare 合并到正向提示词)
         </span>
         <div v-for="(character, index) in characters" :key="index" class="bbi-char-row">
           <input
@@ -384,7 +384,7 @@ onBeforeUnmount(() => {
         <button class="bbi-btn bbi-btn-sm bbi-char-add" type="button" @click="addCharacter">
           <Icon name="plus" /> 添加角色
         </button>
-        <span class="bbi-field-hint">角色名与 tag 都填了才会生效,留空的行保存时自动丢弃。</span>
+        <span class="bbi-field-hint">角色名与 tag 都填了才会生效;Nightmare 会将角色 tag/nl 平铺进正向提示词,角色名不发送。留空的行保存时自动丢弃。</span>
       </div>
 
       <!-- 改提示词会换 promptHash 桶,而 stale 态只显示最新一张、翻页器不出现。
