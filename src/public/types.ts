@@ -95,15 +95,14 @@ export interface PublicBackendStatus {
   model: string;
   /**
    * 当前后端是否支持 characters(多角色提示)。
-  * NAI 4.5/V5 为 true;ComfyUI 与 Nightmare 恒为 false——传了会被静默丢弃,
-   * 故要画多角色时请先看这里,别等出图完才发现。
+   * NAI 4.5/V5 原生支持;Nightmare 会把角色提示合并进正向提示词;ComfyUI 不支持。
    */
   supportsCharacters: boolean;
   /** configured=false 时的人话原因(可直接展示给用户);已就绪为空串。 */
   reason: string;
 }
 
-/** 多角色提示里的一位(NAI 4.5/V5 的 Character Prompt)。 */
+/** 多角色提示里的一位(NAI 原生传输;Nightmare 合并到正向提示词)。 */
 export interface PublicCharacterPrompt {
   /** 角色名,仅用于标识,不进提示词。 */
   name: string;

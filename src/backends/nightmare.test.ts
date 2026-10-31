@@ -14,6 +14,8 @@ function nightmare(overrides: Partial<NightmareSettings> = {}): NightmareSetting
     url: 'http://127.0.0.1:8820',
     token: 'secret-token',
     model: 'model-a',
+    promptPresets: [{ id: 'preset-1', name: '默认', prefix: 'high quality', suffix: '' }],
+    activePromptPresetId: 'preset-1',
     qualityTags: 'high quality',
     negativePrompt: 'watermark',
     resolution: '',
@@ -125,6 +127,26 @@ describe('Nightmare API', () => {
     await generateNightmareImage(nightmare(), { prompt: '1girl, moonlight', seed: 2 });
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)).prompt)
       .toBe('high quality, 1girl, moonlight');
+  });
+
+  it('sends character appearance prompts between the scene and fixed suffix', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [{ url: '/out.png' }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(new Blob(['png'], { type: 'image/png' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await generateNightmareImage(nightmare({
+      promptPresets: [{ id: 'preset-2', name: 'cinematic', prefix: 'masterpiece', suffix: 'dramatic lighting' }],
+      activePromptPresetId: 'preset-2',
+    }), {
+      prompt: '2girls, cafe',
+      characters: [
+        { name: 'A', tag: '1girl, silver hair', nl: 'The first girl is on the left.' },
+        { name: 'B', tag: '1girl, black hair', nl: '' },
+      ],
+      seed: 1,
+    });
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)).prompt)
+      .toBe('masterpiece, 2girls, cafe, 1girl, silver hair, The first girl is on the left., 1girl, black hair, dramatic lighting');
   });
 
   it('reports Nightmare API conflicts with an actionable error', async () => {

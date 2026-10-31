@@ -26,11 +26,11 @@ import type { ImageCharacterPrompt } from '@/autoTag/protocol';
 import { comfySimpleParams, composeNegative, composePositive, validateSimpleConfig, type SimpleGenValues } from '@/backends/comfyTemplates';
 import { generateComfyImage, randomSeed, type ComfyImageResult } from '@/backends/comfyui';
 import { generateNaiImage, naiRandomSeed, naiSupportsCharacterPrompts } from '@/backends/nai';
-import { generateNightmareImage } from '@/backends/nightmare';
+import { composeNightmarePrompts, generateNightmareImage } from '@/backends/nightmare';
 import { effectiveOrientation, parseSize, pickSize, type Orientation } from '@/backends/size';
 import { acquireNaiSlot } from '@/floor/genQueue';
 import type { GenerationMeta } from '@/generationMeta';
-import { activeComfyPreset, activeNaiEndpoint, activeOrientationLock, effectiveComfyConn, effectiveNai, settings, type BackendId } from '@/state/settings';
+import { activeComfyPreset, activeNaiEndpoint, activeNightmarePromptPreset, activeOrientationLock, effectiveComfyConn, effectiveNai, settings, type BackendId } from '@/state/settings';
 
 /** 一次生成的输入。与协议层 ImageInsertion 同形,但不含正文位置信息。 */
 export interface GenerateInput {
@@ -40,7 +40,7 @@ export interface GenerateInput {
   nl?: string;
   /** 本画面动态负面(可空)。ComfyUI 与 Nightmare 使用；NAI 的负面取渠道配置。 */
   negative?: string;
-  /** NAI 4.5/V5 原生多角色提示;ComfyUI 不支持(见 charactersApplied)。 */
+  /** 角色外貌提示;NAI 原生传输,Nightmare 合并进正向提示,ComfyUI 不支持。 */
   characters?: ImageCharacterPrompt[];
   /**
    * 画幅方向;缺省竖屏。具体像素取渠道配置里的横竖尺寸。
@@ -70,9 +70,9 @@ export interface GenerateOutput {
   backend: BackendId;
   /**
    * characters 是否真的发给了后端。
-   * ComfyUI 链路**不支持**多角色提示(comfyui.ts / comfyTemplates.ts 全程不读该字段),
+   * ComfyUI 链路**不支持**角色提示(comfyui.ts / comfyTemplates.ts 全程不读该字段),
    * 传了也是静默丢弃 —— 故显式回报,调用方据此决定要不要提示用户换后端。
-   * 不在这里「降级拼进 prompt」:那正是 0.2.3 修掉的重叠躯干问题(一张图里多份完整外貌)。
+   * Nightmare 没有原生角色槽,会把每位角色的提示平铺进正向提示词。
    */
   charactersApplied: boolean;
   /**
@@ -88,7 +88,7 @@ export interface BackendStatus {
   configured: boolean;
   /** NAI / Nightmare 为模型名;ComfyUI 为当前工作流预设名。 */
   model: string;
-  /** 当前后端是否支持 characters(NAI 4.5/V5 为 true,ComfyUI / Nightmare 恒 false)。 */
+  /** 当前后端是否支持 characters(NAI 4.5/V5 原生支持,Nightmare 会合并发送,ComfyUI 不支持)。 */
   supportsCharacters: boolean;
   /** configured=false 时的人话原因;已就绪为空串。 */
   reason: string;
@@ -141,7 +141,7 @@ export function backendStatus(): BackendStatus {
 
   if (backend === 'nightmare') {
     const canvas = settings.nightmare.mode === 'current';
-    const base = { backend, model: canvas ? 'Nightmare 当前画布（模型由画布决定）' : settings.nightmare.model, supportsCharacters: false };
+    const base = { backend, model: canvas ? 'Nightmare 当前画布（模型由画布决定）' : settings.nightmare.model, supportsCharacters: true };
     if (!settings.nightmare.url.trim()) return { ...base, configured: false, reason: '未填写 Nightmare 服务地址' };
     if (!settings.nightmare.token.trim()) return { ...base, configured: false, reason: '未填写 Nightmare API Token' };
     if (!canvas && !settings.nightmare.model.trim()) return { ...base, configured: false, reason: '未选择 Nightmare 模型' };
@@ -200,7 +200,7 @@ export async function generateImage(
   const isNai = status.backend === 'nai';
   const isNightmare = status.backend === 'nightmare';
   const characters = input.characters ?? [];
-  // 支持与否由后端说了算:ComfyUI 恒不支持;NAI 看模型是否 4.5/V5
+  // 支持与否由后端说了算:ComfyUI 恒不支持;NAI 看模型是否 4.5/V5;Nightmare 平铺角色提示
   const charactersApplied = characters.length > 0 && status.supportsCharacters;
 
   let release: (() => void) | null = null;
@@ -228,17 +228,17 @@ export async function generateImage(
     } else if (isNightmare) {
       const output = await generateNightmareImage(
         settings.nightmare,
-        { prompt: input.prompt, nl: input.nl, negative: input.negative, seed: input.seed, size },
+        { prompt: input.prompt, nl: input.nl, characters, negative: input.negative, seed: input.seed, size },
         signal,
         () => progress.onStart?.(),
       );
       result = output;
       const canvas = settings.nightmare.mode === 'current';
       const dimensions = canvas ? null : parseSize(pickSize(settings.nightmare, size));
-      const positive = [settings.nightmare.qualityTags.trim(), input.nl?.trim() || input.prompt]
-        .filter(Boolean)
-        .join(', ');
-      const negative = [settings.nightmare.negativePrompt.trim(), input.negative?.trim()].filter(Boolean).join(', ');
+      const { prompt: positive, negative } = composeNightmarePrompts(settings.nightmare, {
+        prompt: input.prompt, nl: input.nl, characters, negative: input.negative, seed: input.seed, size,
+      });
+      const promptPreset = activeNightmarePromptPreset();
       meta = {
         backend: 'nightmare',
         model: status.model,
@@ -253,7 +253,8 @@ export async function generateImage(
           ...(!canvas && settings.nightmare.scheduler.trim() ? { scheduler: settings.nightmare.scheduler.trim() } : {}),
           ...(!canvas && settings.nightmare.steps > 0 ? { steps: settings.nightmare.steps } : {}),
           ...(!canvas && settings.nightmare.cfg > 0 ? { cfg: settings.nightmare.cfg } : {}),
-          ...(settings.nightmare.qualityTags.trim() ? { quality: settings.nightmare.qualityTags.trim() } : {}),
+          ...(promptPreset?.prefix.trim() ? { quality: promptPreset.prefix.trim() } : {}),
+          ...(promptPreset?.suffix.trim() ? { fixedPromptSuffix: promptPreset.suffix.trim() } : {}),
         },
       };
     } else {

@@ -131,7 +131,7 @@ if (!status.configured) {
 
 > **不含服务地址与 API Key。** 这两样永远不会出现在任何公开返回值里。
 
-`supportsCharacters` 只看模型，与配没配齐无关——你可以在用户还没填 Key 时就知道该不该准备 `characters`。**ComfyUI 与 Nightmare 恒为 `false`**。
+`supportsCharacters` 只看后端与模型，与配没配齐无关——你可以在出图前知道该不该准备 `characters`。NAI 4.5/V5 原生支持；Nightmare 会把角色提示合并进正向提示词；ComfyUI 不支持。
 
 ## 调生图
 
@@ -184,7 +184,7 @@ myPanel.querySelector('img').src = result.dataUrl;   // 想显示在哪就显示
 
 落盘**失败不会抛错**——图已经在 `dataUrl` 里了，不能因为存不进图库就让你连图都拿不到。这种情况 `path` 是 `null`。
 
-### 多角色（NAI 4.5 / V5）
+### 多角色提示
 
 ```js
 const status = api.getBackendStatus();
@@ -202,7 +202,7 @@ if (!result.charactersApplied) {
 }
 ```
 
-`charactersApplied` 明说这次到底用上了没有。柏宝绘**刻意不降级**把角色拼进 `prompt`——那会画出多份躯干重叠的图。要画多角色，请先看 `supportsCharacters`。
+`charactersApplied` 明说这次到底用上了没有。NAI 4.5/V5 会使用原生角色槽位；Nightmare 会将角色 tag 与 nl 合并到正向提示词中，不能保证像 NAI 原生槽位一样精确区分每个角色；ComfyUI 不支持角色提示。请先看 `supportsCharacters`。
 
 ### 进度与取消
 

@@ -54,7 +54,31 @@ describe('Nightmare settings migration', () => {
       seed: 56,
       naturalLanguage: false,
     });
+    expect(settings.nightmare.promptPresets).toHaveLength(1);
+    expect(settings.nightmare.promptPresets[0]).toMatchObject({
+      name: '默认',
+      prefix: 'sharp',
+      suffix: '',
+    });
+    expect(settings.nightmare.activePromptPresetId).toBe(settings.nightmare.promptPresets[0].id);
   }, 15_000);
+
+  it('preserves selected Nightmare prefix and suffix prompt presets', async () => {
+    const settings = await hydrate({
+      nightmare: {
+        promptPresets: [
+          { id: 'nmp_one', name: '柔和', prefix: 'soft light', suffix: 'pastel colors' },
+          { id: 'nmp_two', name: '电影感', prefix: 'cinematic', suffix: 'dramatic shadows' },
+        ],
+        activePromptPresetId: 'nmp_two',
+      },
+    });
+    expect(settings.nightmare.promptPresets).toEqual([
+      { id: 'nmp_one', name: '柔和', prefix: 'soft light', suffix: 'pastel colors' },
+      { id: 'nmp_two', name: '电影感', prefix: 'cinematic', suffix: 'dramatic shadows' },
+    ]);
+    expect(settings.nightmare.activePromptPresetId).toBe('nmp_two');
+  });
 
   it('preserves the current canvas mode without requiring a model', async () => {
     const settings = await hydrate({ nightmare: { mode: 'current', model: '' } });

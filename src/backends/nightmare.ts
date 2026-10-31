@@ -1,4 +1,5 @@
 import { parseSize, pickSize, type Orientation } from '@/backends/size';
+import type { ImageCharacterPrompt } from '@/autoTag/protocol';
 import type { ComfyImageResult } from '@/backends/comfyui';
 import type { NightmareSettings } from '@/state/settings';
 
@@ -21,9 +22,30 @@ export interface NightmareGenerateValues {
   prompt: string;
   /** LLM 生成的自然语言；Anima 与 ComfyUI 简易模式一致，存在时优先使用。 */
   nl?: string;
+  /** 本地角色外貌提示;Nightmare 不支持原生角色槽,会合并进正向提示词。 */
+  characters?: ImageCharacterPrompt[];
   negative?: string;
   seed: number;
   size?: Orientation;
+}
+
+export interface NightmarePrompts {
+  prompt: string;
+  negative: string;
+}
+
+/** 按实际发给 Nightmare 的顺序组装正负向提示词。 */
+export function composeNightmarePrompts(settings: NightmareSettings, values: NightmareGenerateValues): NightmarePrompts {
+  const preset = settings.promptPresets.find(item => item.id === settings.activePromptPresetId);
+  const scene = values.nl?.trim() || values.prompt.trim();
+  const characterPrompts = (values.characters ?? []).flatMap(character => [
+    character.tag.trim(),
+    character.nl?.trim() ?? '',
+  ]);
+  return {
+    prompt: [preset?.prefix.trim(), scene, ...characterPrompts, preset?.suffix.trim()].filter(Boolean).join(', '),
+    negative: [settings.negativePrompt.trim(), values.negative?.trim()].filter(Boolean).join(', '),
+  };
 }
 
 const nightmareWaiting: Array<() => void> = [];
@@ -207,9 +229,7 @@ async function runNightmareImage(
 ): Promise<ComfyImageResult> {
 
   const dimensions = parseSize(pickSize(settings, values.size ?? 'portrait'));
-  const generatedPrompt = values.nl?.trim() || values.prompt.trim();
-  const prompt = [settings.qualityTags.trim(), generatedPrompt].filter(Boolean).join(', ');
-  const negative = [settings.negativePrompt.trim(), values.negative?.trim()].filter(Boolean).join(', ');
+  const { prompt, negative } = composeNightmarePrompts(settings, values);
   const body: Record<string, unknown> = {
     flow: settings.mode === 'current' ? 'current' : 'txt2img',
     prompt,

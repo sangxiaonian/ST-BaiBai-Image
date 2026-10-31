@@ -108,6 +108,9 @@ export interface ComfyUISettings extends BackendConn {
 export interface NightmareSettings extends BackendConn {
   /** current 仅替换提示词，其余配置由 Nightmare 当前画布决定。 */
   mode: 'txt2img' | 'current';
+  /** 多套固定正向提示词;空库或空 id = 不使用。 */
+  promptPresets: NightmarePromptPreset[];
+  activePromptPresetId: string;
   token: string;
   model: string;
   steps: number;
@@ -117,6 +120,14 @@ export interface NightmareSettings extends BackendConn {
   seed: number;
   /** 是否要求自动 tag 的 LLM 同时生成自然语言描述。 */
   naturalLanguage: boolean;
+}
+
+/** Nightmare 一套具名固定正向提示词。 */
+export interface NightmarePromptPreset {
+  id: string;
+  name: string;
+  prefix: string;
+  suffix: string;
 }
 
 /**
@@ -1126,9 +1137,12 @@ function comfyDefaults(): ComfyUISettings {
 }
 
 function nightmareDefaults(): NightmareSettings {
+  const promptPreset = newNightmarePromptPreset('提示词 1');
   return {
     ...backendDefaults('http://127.0.0.1:8820'),
     mode: 'txt2img',
+    promptPresets: [promptPreset],
+    activePromptPresetId: promptPreset.id,
     token: '',
     model: '',
     steps: 24,
@@ -1137,6 +1151,23 @@ function nightmareDefaults(): NightmareSettings {
     seed: 0,
     naturalLanguage: true,
   };
+}
+
+let nightmarePromptPresetSeq = 0;
+
+/** 新建一套固定正向提示词。 */
+export function newNightmarePromptPreset(
+  name = '提示词',
+  prefix = '',
+  suffix = '',
+): NightmarePromptPreset {
+  nightmarePromptPresetSeq += 1;
+  return { id: `nmp_${Date.now()}_${nightmarePromptPresetSeq}`, name, prefix, suffix };
+}
+
+/** 当前 Nightmare 固定提示词;空 id 或悬空 id 均表示不使用。 */
+export function activeNightmarePromptPreset(): NightmarePromptPreset | null {
+  return settings.nightmare.promptPresets.find(preset => preset.id === settings.nightmare.activePromptPresetId) ?? null;
 }
 
 /** 新画师串的默认名。 */
@@ -1608,6 +1639,16 @@ function normalizeArtistPreset(raw: unknown, seq: number): NaiArtistPreset {
   };
 }
 
+function normalizeNightmarePromptPreset(raw: unknown, seq: number): NightmarePromptPreset {
+  const o = (raw ?? {}) as Partial<NightmarePromptPreset>;
+  return {
+    id: typeof o.id === 'string' && o.id ? o.id : `nmp_${Date.now()}_${seq}`,
+    name: typeof o.name === 'string' && o.name ? o.name : `提示词 ${seq + 1}`,
+    prefix: typeof o.prefix === 'string' ? o.prefix : '',
+    suffix: typeof o.suffix === 'string' ? o.suffix : '',
+  };
+}
+
 /**
  * 单条接入点清洗。官方条的 name/url 一律纠回内置值:UI 已禁掉改名与改址,
  * 还能出现别的值只有手改 settings.json 一途;纠回去也顺带让内置名随插件版本更新。
@@ -1716,9 +1757,19 @@ function normalizeNai(raw: unknown, def: NaiSettings): NaiSettings {
 function normalizeNightmare(raw: unknown, def: NightmareSettings): NightmareSettings {
   const conn = normalizeBackend(raw, def);
   const o = (raw ?? {}) as Partial<NightmareSettings>;
+  const promptPresets = Array.isArray(o.promptPresets)
+    ? o.promptPresets.map(normalizeNightmarePromptPreset)
+    : [newNightmarePromptPreset('默认', conn.qualityTags)];
   return {
     ...conn,
     mode: o.mode === 'current' ? 'current' : 'txt2img',
+    promptPresets,
+    activePromptPresetId:
+      typeof o.activePromptPresetId === 'string' && promptPresets.some(preset => preset.id === o.activePromptPresetId)
+        ? o.activePromptPresetId
+        : Array.isArray(o.promptPresets)
+          ? ''
+          : promptPresets[0]?.id ?? '',
     token: typeof o.token === 'string' ? o.token : def.token,
     model: typeof o.model === 'string' ? o.model : def.model,
     steps: Math.round(clampNumber(o.steps, def.steps, 0, 100)),

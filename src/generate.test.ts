@@ -15,7 +15,10 @@ vi.mock('@/backends/comfyui', async importOriginal => ({
   ...(await importOriginal<typeof import('@/backends/comfyui')>()),
   generateComfyImage: vi.fn(),
 }));
-vi.mock('@/backends/nightmare', () => ({ generateNightmareImage: vi.fn() }));
+vi.mock('@/backends/nightmare', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/backends/nightmare')>()),
+  generateNightmareImage: vi.fn(),
+}));
 vi.mock('@/floor/genQueue', () => ({ acquireNaiSlot: vi.fn() }));
 
 function fakeResult() {
@@ -71,6 +74,8 @@ function nightmareReady(): void {
   settings.nightmare.token = 'local-token';
   settings.nightmare.model = 'moss';
   settings.nightmare.qualityTags = 'high quality';
+  settings.nightmare.promptPresets = [{ id: 'nmp_test', name: '默认', prefix: 'high quality', suffix: '' }];
+  settings.nightmare.activePromptPresetId = 'nmp_test';
   settings.nightmare.negativePrompt = 'watermark';
   settings.nightmare.portraitSize = '832×1216';
   settings.nightmare.landscapeSize = '1216×832';
@@ -152,10 +157,10 @@ describe('backendStatus', () => {
     expect(backendStatus()).toMatchObject({ configured: true, supportsCharacters: false });
   });
 
-  it('recognizes configured Nightmare and does not support character prompts', () => {
+  it('recognizes configured Nightmare and supports flattened character prompts', () => {
     nightmareReady();
     expect(backendStatus()).toMatchObject({
-      backend: 'nightmare', model: 'moss', configured: true, supportsCharacters: false,
+      backend: 'nightmare', model: 'moss', configured: true, supportsCharacters: true,
     });
     settings.nightmare.token = '';
     expect(backendStatus()).toMatchObject({ configured: false, reason: '未填写 Nightmare API Token' });
@@ -232,6 +237,7 @@ describe('generateImage', () => {
     expect(request).toEqual({
       prompt: '1girl, moonlight',
       nl: 'A girl under the moon',
+      characters: [],
       negative: 'extra people',
       seed: 42,
       size: 'portrait',
@@ -281,6 +287,15 @@ describe('generateImage', () => {
     expect((await generateImage({ prompt: 'x', characters, seed: 1 })).charactersApplied).toBe(true);
     // 没传角色时不该报「用上了」
     expect((await generateImage({ prompt: 'x', seed: 1 })).charactersApplied).toBe(false);
+  });
+
+  it('sends Nightmare character appearance prompts and reports them as applied', async () => {
+    nightmareReady();
+    const characters = [{ name: '阿黛尔', tag: '1girl, silver hair', nl: 'A silver-haired girl on the left.' }];
+    const output = await generateImage({ prompt: 'cafe', characters, seed: 1 });
+    expect(vi.mocked(generateNightmareImage).mock.calls[0][1].characters).toEqual(characters);
+    expect(output.charactersApplied).toBe(true);
+    expect(output.meta.positive).toBe('high quality, cafe, 1girl, silver hair, A silver-haired girl on the left.');
   });
 
   it('refuses to fire a doomed request when the backend is not configured', async () => {

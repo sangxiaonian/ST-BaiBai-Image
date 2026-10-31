@@ -6,8 +6,9 @@ import {
   type NightmareModel,
 } from '@/backends/nightmare';
 import Collapsible from '@/components/Collapsible.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
-import { activeComfyPreset, settings } from '@/state/settings';
+import { activeComfyPreset, activeNightmarePromptPreset, newNightmarePromptPreset, settings } from '@/state/settings';
 import { computed, onMounted, ref, watch } from 'vue';
 
 const testing = ref(false);
@@ -17,6 +18,18 @@ const models = ref<NightmareModel[]>([]);
 const schedulers = ref<string[]>([]);
 const inUse = computed(() => settings.defaultBackend === 'nightmare');
 const selectedModel = computed(() => models.value.find(model => model.id === settings.nightmare.model));
+const promptPreset = computed(() => activeNightmarePromptPreset());
+const promptPresetOptions = computed(() => [
+  { value: '', label: '不使用固定正向提示词' },
+  ...settings.nightmare.promptPresets.map(preset => ({ value: preset.id, label: preset.name || '未命名提示词' })),
+]);
+const activePromptPresetId = computed<string>({
+  get: () => promptPreset.value?.id ?? '',
+  set: id => {
+    settings.nightmare.activePromptPresetId = id;
+  },
+});
+const confirmDeletePromptOpen = ref(false);
 const comfyAnimaPreset = computed(() => {
   const preset = activeComfyPreset();
   return preset.mode === 'simple' && preset.simple.template === 'anima' ? preset : null;
@@ -25,9 +38,33 @@ const comfyAnimaPreset = computed(() => {
 function copyComfyAnimaPrompts(): void {
   const preset = comfyAnimaPreset.value;
   if (!preset) return;
-  settings.nightmare.qualityTags = preset.simple.positive;
+  if (!promptPreset.value) addPromptPreset();
+  if (promptPreset.value) promptPreset.value.prefix = preset.simple.positive;
   settings.nightmare.negativePrompt = preset.simple.negative;
   toastr.success('已复制 ComfyUI Anima 固定正负面提示词', '柏宝绘');
+}
+
+function addPromptPreset(): void {
+  const preset = newNightmarePromptPreset(`提示词 ${settings.nightmare.promptPresets.length + 1}`);
+  settings.nightmare.promptPresets.push(preset);
+  settings.nightmare.activePromptPresetId = preset.id;
+}
+
+function duplicatePromptPreset(): void {
+  const current = promptPreset.value;
+  if (!current) return;
+  const preset = newNightmarePromptPreset(`${current.name} 副本`, current.prefix, current.suffix);
+  settings.nightmare.promptPresets.push(preset);
+  settings.nightmare.activePromptPresetId = preset.id;
+}
+
+function confirmRemovePromptPreset(): void {
+  confirmDeletePromptOpen.value = false;
+  const presets = settings.nightmare.promptPresets;
+  const index = presets.findIndex(preset => preset.id === promptPreset.value?.id);
+  if (index < 0) return;
+  presets.splice(index, 1);
+  settings.nightmare.activePromptPresetId = presets[Math.min(index, presets.length - 1)]?.id ?? '';
 }
 
 function errorText(value: unknown): string {
@@ -153,8 +190,29 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
         </div>
 
         <div class="bbi-field">
-          <div class="bbi-field-head"><span class="bbi-field-label">固定正面提示词</span></div>
-          <textarea v-model="settings.nightmare.qualityTags" class="bbi-input bbi-textarea" rows="3" placeholder="每次生成时拼到正向提示词前面" />
+          <div class="bbi-field-head"><span class="bbi-field-label">固定正向提示词</span></div>
+          <div class="prompt-preset-row">
+            <select v-model="activePromptPresetId" class="bbi-input bbi-select" aria-label="当前固定提示词">
+              <option v-for="option in promptPresetOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <input v-if="promptPreset" v-model="promptPreset.name" class="bbi-input prompt-preset-name" placeholder="提示词名称" />
+            <span class="prompt-preset-actions">
+              <button class="bbi-icon-btn" type="button" title="新建固定提示词" aria-label="新建固定提示词" @click="addPromptPreset">
+                <Icon name="plus" :size="14" />
+              </button>
+              <button class="bbi-icon-btn" type="button" :disabled="!promptPreset" title="复制当前固定提示词" aria-label="复制当前固定提示词" @click="duplicatePromptPreset">
+                <Icon name="copy" :size="14" />
+              </button>
+              <button class="bbi-icon-btn" type="button" :disabled="!promptPreset" title="删除当前固定提示词" aria-label="删除当前固定提示词" @click="confirmDeletePromptOpen = true">
+                <Icon name="trash" :size="14" />
+              </button>
+            </span>
+          </div>
+          <template v-if="promptPreset">
+            <textarea v-model="promptPreset.prefix" class="bbi-input bbi-textarea" rows="3" placeholder="前置固定提示词：拼到画面提示词之前" />
+            <textarea v-model="promptPreset.suffix" class="bbi-input bbi-textarea prompt-suffix" rows="3" placeholder="后置固定提示词：拼到画面与角色提示词之后" />
+          </template>
+          <p class="bbi-field-hint">每套提示词可单独命名、切换、复制或删除；角色外貌词会随画面提示词一并发送。</p>
         </div>
         <div class="bbi-field">
           <div class="bbi-field-head"><span class="bbi-field-label">固定负面提示词</span></div>
@@ -186,6 +244,16 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
         <p class="bbi-field-hint">启用后要求自动 tag 的 LLM 同时生成 nl；Anima 出图时有 nl 优先使用，否则回退 tag。正文已有 nl 时仍会照常使用。</p>
       </Collapsible>
     </div>
+    <ConfirmDialog
+      v-model:open="confirmDeletePromptOpen"
+      title="删除固定提示词"
+      confirm-text="删除"
+      confirm-icon="trash"
+      tone="danger"
+      @confirm="confirmRemovePromptPreset"
+    >
+      确定删除固定提示词「{{ promptPreset?.name || '未命名提示词' }}」？删除后无法恢复。
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -193,9 +261,17 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
 .be-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 12px; }
 .conn-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .prompt-copy-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.prompt-preset-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.prompt-preset-row > .bbi-select { min-width: 0; flex: 1 1 160px; }
+.prompt-preset-name { flex: 1 1 120px; min-width: 0; }
+.prompt-preset-actions { display: flex; flex: 0 0 auto; gap: 2px; }
+.prompt-suffix { margin-top: 8px; }
 .bbi-textarea { resize: vertical; }
 @media (max-width: 640px) {
   .be-grid { grid-template-columns: 1fr; }
   .prompt-copy-row { align-items: flex-start; flex-direction: column; }
+  .prompt-preset-row { flex-wrap: wrap; }
+  .prompt-preset-row > .bbi-select { flex-basis: calc(100% - 88px); }
+  .prompt-preset-name { flex-basis: 100%; }
 }
 </style>
