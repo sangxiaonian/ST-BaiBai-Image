@@ -295,7 +295,12 @@ describe('generateImage', () => {
     const output = await generateImage({ prompt: 'cafe', characters, seed: 1 });
     expect(vi.mocked(generateNightmareImage).mock.calls[0][1].characters).toEqual(characters);
     expect(output.charactersApplied).toBe(true);
-    expect(output.meta.positive).toBe('high quality, cafe, 1girl, silver hair, A silver-haired girl on the left.');
+    expect(output.meta.positive).toBe(
+      'high quality\n\n' +
+        'Scene: cafe\n\n' +
+        'Characters:\n' +
+        'Character 1: Appearance: 1girl, silver hair; In-scene description: A silver-haired girl on the left.',
+    );
   });
 
   it('refuses to fire a doomed request when the backend is not configured', async () => {

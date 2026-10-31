@@ -40,6 +40,8 @@ import {
 export interface AutoTagProfile {
   /** NAI 4.5/V5:Base + 原生 Character Prompts(characters[])。 */
   naiCharPrompts: boolean;
+  /** Nightmare:将人物按结构化角色列表输出,后续会格式化进单一正向提示词。 */
+  nightmareCharPrompts: boolean;
   /**
   * 协议含 nl:ComfyUI / Nightmare 开了「生成自然语言」,或 NAI 4.5/V5 开了该选项。
    * 两个开关同一口径,只管 AI 写不写;已写进 tag 的 nl 照常发送。
@@ -52,6 +54,7 @@ export interface AutoTagProfile {
 export function autoTagProfile(): AutoTagProfile {
   const backend = settings.defaultBackend;
   const naiCharPrompts = backend === 'nai' && naiSupportsCharacterPrompts(settings.nai.model);
+  const nightmareCharPrompts = backend === 'nightmare';
   // 两项都取自同一个当前预设 / 渠道:切工作流即同时切走自然语言与画幅锁的口径
   const nl =
     backend === 'comfyui'
@@ -60,8 +63,18 @@ export function autoTagProfile(): AutoTagProfile {
         ? settings.nightmare.naturalLanguage
       : naiCharPrompts && settings.nai.naturalLanguage;
   const lock = activeOrientationLock();
-  return { naiCharPrompts, nl, lockedSize: lock === 'auto' ? null : lock };
+  return { naiCharPrompts, nightmareCharPrompts, nl, lockedSize: lock === 'auto' ? null : lock };
 }
+
+const NIGHTMARE_CHARACTER_SPEC = `【Nightmare 结构化角色提示补充】
+Nightmare API 最终只接收一个 prompt 字符串；这里的 characters 数组是柏宝绘用于区分角色的中间结构，不是 NAI 原生角色槽。
+- Base 的 tag/nl 只写人数、镜头、场景、光线和多人共享互动；每个人独有的特征只写进该角色自己的 characters 项，不要在 Base 重复。
+- 镜头内每个可辨认的角色各输出一条 characters 项，按从左到右、从上到下排序；人群作为整体留在 Base，不拆成多条角色。
+- characters[].name 使用正文/角色库中的原名；姓名只放在 name 字段，绝不写进 Base 或任何 tag/nl。tag 只写此角色的外貌与个人特征，不带人数 tag。
+{{#nl}}- characters[].tag 放该角色的固定外貌、服装、表情和视线；characters[].nl 用英文短句说明该角色在画面中的位置、姿势或个人动作，避免重复 tag 中的外貌。{{/nl}}{{^nl}}- 自然语言关闭时，characters[].tag 同时包含该角色的外貌、服装、表情、视线与个人动作。{{/nl}}
+输出仍为 JSON 中的 characters 数组，不要把字段标签、XML 或说明文字写进 tag/nl。`;
+
+const NIGHTMARE_CHARACTER_THINKING = `Nightmare 角色块检查：每位镜头内角色都要有独立的 characters 项；Base 只保留整体场景与共享互动；逐项确认每个角色的外貌没有串到别人。自然语言开启时，角色 tag 负责外貌/服装/表情/视线，角色 nl 用英文写清位置与个人动作；关闭时这些信息都写进角色 tag。`;
 
 /**
  * 展开自然语言条件段:{{#nl}}…{{/nl}} 只在开启自然语言时保留,{{^nl}}…{{/nl}} 只在关闭时保留
@@ -95,7 +108,11 @@ function backendPromptSpec(options: AutoTagSettings, nlOn: boolean, naiCharPromp
         ? `${template}\n\n${nlSpec}`
         : template;
     // 宏置空后可能留下连续空行,折叠掉
-    return resolved.replace(/\n{3,}/g, '\n\n').trim();
+    const nightmareSupplement =
+      settings.defaultBackend === 'nightmare'
+        ? `\n\n${expandNlSections(NIGHTMARE_CHARACTER_SPEC, nlOn)}`
+        : '';
+    return `${resolved}${nightmareSupplement}`.replace(/\n{3,}/g, '\n\n').trim();
   }
   if (settings.defaultBackend === 'nai') {
     const template = naiCharPromptsOn
@@ -121,7 +138,10 @@ function backendThinkingPrompt(options: AutoTagSettings, nlOn: boolean, naiCharP
       : (options.prompts?.naiThinking ?? '').trim() || DEFAULT_NAI_THINKING;
     return expandNlSections(template, nlOn);
   }
-  return expandNlSections((options.prompts?.comfyThinking ?? '').trim() || DEFAULT_COMFY_THINKING, nlOn);
+  const thinking = expandNlSections((options.prompts?.comfyThinking ?? '').trim() || DEFAULT_COMFY_THINKING, nlOn);
+  return settings.defaultBackend === 'nightmare'
+    ? `${thinking}\n\n${NIGHTMARE_CHARACTER_THINKING}`
+    : thinking;
 }
 
 function recentFloors(context: STContext, targetFloor: number, count: number): number[] {
@@ -196,6 +216,8 @@ export async function buildAutoTagMessages(
   const naiCharPromptsOn = profile.naiCharPrompts;
   const comfyPreset = comfyOn ? activeComfyPreset() : null;
   const nlOn = profile.nl;
+  const nightmareCharPromptsOn = profile.nightmareCharPrompts;
+  const characterPromptsOn = naiCharPromptsOn || nightmareCharPromptsOn;
   // 动态负面词门槛:custom 模式看工作流是否含 %negative_prompt%;
   // simple 模式由模板决定(Flux 无真实负面输入,请求了也没地方写)。
   let negativeOn = false;
@@ -219,24 +241,32 @@ export async function buildAutoTagMessages(
   const sampleNl = library
     ? 'A girl with long silver hair and red eyes wearing a white dress'
     : 'A girl with short black hair wearing a white dress';
+  const sampleSceneNl = nightmareCharPromptsOn
+    ? 'A classroom at sunset, with warm light across the room.'
+    : 'A girl stands in a classroom with sunset light coming in.';
+  const sampleCharacterTag = nightmareCharPromptsOn && nlOn
+    ? library
+      ? 'girl, long silver hair, red eyes, white dress, smile, looking at viewer'
+      : 'girl, short black hair, blue eyes, white dress, smile, looking at viewer'
+    : library
+      ? 'girl, long silver hair, red eyes, white dress, waving'
+      : 'girl, short black hair, blue eyes, white dress, waving';
   // NAI 关掉自然语言时示例里一个 nl 键都不留:模型照抄示例的倾向比照读规则强得多
-  const sampleImage: Record<string, unknown> = naiCharPromptsOn
+  const sampleImage: Record<string, unknown> = characterPromptsOn
     ? {
         position: 'P2',
         tag: '1girl, classroom, sunset, medium shot',
-        ...(nlOn ? { nl: 'A girl stands in a classroom with sunset light coming in.' } : {}),
+        ...(nlOn ? { nl: sampleSceneNl } : {}),
         characters: [
           {
             name: '小雪',
-            tag: library
-              ? 'girl, long silver hair, red eyes, white dress, waving'
-              : 'girl, short black hair, blue eyes, white dress, waving',
+            tag: sampleCharacterTag,
             ...(nlOn ? { nl: 'The girl waves on the left side of the frame.' } : {}),
           },
         ],
       }
     : { position: 'P2', tag: sampleTag };
-  if (nlOn && !naiCharPromptsOn) sampleImage.nl = sampleNl;
+  if (nlOn && !characterPromptsOn) sampleImage.nl = sampleNl;
   if (negativeOn) sampleImage.negative = 'extra people, duplicate character';
   sampleImage.size = profile.lockedSize ?? 'portrait';
   const outputShape = JSON.stringify({ images: [sampleImage], changes: [] });
@@ -247,7 +277,11 @@ export async function buildAutoTagMessages(
     ? nlOn
       ? `4. Every image must include Base tag, English Base nl, and characters. Write every nl in English even when the story text is in another language, but keep every character name exactly as in the story: Chinese names stay Chinese (小雪, never Xiaoxue or Snow) in characters[].name, changes[].name, and inside any tag/nl text. Base contains only global counts, scene, composition, lighting, and shared relations — this applies to the Base nl as much as to the Base tag. Give each individual character visible inside the selected frame one Character Prompt ordered left-to-right then top-to-bottom; name/tag/nl are all required. ${naiCharacterRuleTail}`
       : `4. Every image must include Base tag and characters. This output is tag-only: write no nl key anywhere, neither in Base nor in characters[]. Keep every character name exactly as in the story: Chinese names stay Chinese (小雪, never Xiaoxue or Snow) in characters[].name, changes[].name, and inside any tag text. Base contains only global counts, scene, composition, lighting, and shared relations. Give each individual character visible inside the selected frame one Character Prompt ordered left-to-right then top-to-bottom; name and tag are both required. ${naiCharacterRuleTail}`
-    : nlOn
+    : nightmareCharPromptsOn
+      ? nlOn
+        ? `4. Every image must include Base tag, English Base nl, and characters. Keep character names exactly as written in the story, but put names only in characters[].name, never in Base tag/nl or characters[].tag/nl. Base tag/nl contain only overall counts, composition, scene, lighting, and shared interactions; each visible individual gets one characters item, ordered left-to-right then top-to-bottom, with name/tag/nl. Put that character's fixed appearance, outfit, expression, and gaze only in their own characters[].tag. Each characters[].nl is an English sentence that clearly identifies the character's position and individual action without needlessly repeating fixed appearance from tag. Anonymous crowds remain in Base.`
+        : `4. Every image must include Base tag and characters, with no nl key anywhere. Keep character names exactly as written in the story, but put names only in characters[].name, never in Base tag or characters[].tag. Base tag contains only overall counts, composition, scene, lighting, and shared interactions; each visible individual gets one characters item, ordered left-to-right then top-to-bottom, with name and tag. Put that character's fixed appearance, outfit, expression, gaze, and personal action only in their own characters[].tag. Anonymous crowds remain in Base.`
+      : nlOn
     ? '4. tag 与 nl 是同一画面的两种写法：tag 是 danbooru 短 tag，nl 是连贯的自然语言；二者都只含正面内容，不得包含质量词、负面词、JSON 以外的说明或 <bbi_image>/<tag>/<nl>/<size> 标签。'
     : '4. tag 只能是该画面的正面内容提示词；不得包含质量词、负面词、JSON 以外的说明或 <bbi_image> 标签。';
   const negativeRule = negativeOn
@@ -275,6 +309,8 @@ export async function buildAutoTagMessages(
 
   const libraryReferenceRule = naiCharPromptsOn
     ? `- If a visible character exists in the fixed appearance library or is created in this changes array, copy the fixed fields into that character own characters[].tag; keep appearance wording verbatim but convert 1girl/1boy to girl/boy. The fandom identity tag (fields.fandom) goes first, verbatim. Do not put them in Base or assign them to another character.${nlOn ? ' Library natural-language notes may inform that character nl.' : ''} Use the library entry name verbatim for characters[].name and for any name inside ${nlOn ? 'tag/nl' : 'tag'} — never transliterate, translate, or vary it.`
+    : nightmareCharPromptsOn
+      ? '- For a visible character with a fixed appearance library entry or newly created profile, copy fixed fields verbatim into that character characters[].tag (converting 1girl/1boy to girl/boy); never put a person-specific appearance into Base or another character. Natural-language character nl should explain this frame’s position/action, not replace or repeat the fixed appearance tag.'
     : '- 画面中的角色只要已在【角色固定外貌库】，或在本次 changes 中建了档，tag 与 nl 就必须照抄库中/刚建档的字段值，用词一字不改，不得自行改写或增删其固定外貌。fandom 字段只作档案记录，ComfyUI 画图时不照抄它，同人身份 tag 按下发的 ComfyUI 规范现场判定并按规范转义括号。\n   - 同一角色的固定外貌在一张图里只写一遍：同一图内再次提到他时用简短指代（the boy、the silver-haired girl）承接，禁止把整串外貌重复第二遍——重复会让模型以为画面里有多个同样的人，把一个人画成互不相连的几块。';
   // 建档 nl 只在协议含 nl 时要求(runner 的验收同一口径,见 autoTagProfile)
   const newCharacterNlRule = !naiCharPromptsOn
@@ -290,13 +326,18 @@ export async function buildAutoTagMessages(
    - 建档字段只放**长期不变的身体特征**：sex/hair/eyes/skin/body/extra 填性别、发色发型、瞳色、肤色、体型、标志特征；outfit 只填该角色**固定不换的招牌着装**；判定为同人角色的，fields 里必须写 fandom（模型可识别的英文 Danbooru 身份 tag，格式 character name (copyright name)），原创角色不写 fandom。动作、姿势、所在场景、临时状态（lying on carpet、standing、sitting、unzipped、湿身、伤势等）一律不得写进任何字段——档案会在他之后每一张图里被照抄，把姿势写进去会让他在所有画面里都保持那个姿势。
    - 建档取值优先级：目标正文明确的当前外貌 > 柏宝书当前角色状态 > 角色卡/世界书明确人设 > 合理补全。人设明确写了颜色时必须原样转换，不得擅改；hair 与 eyes 必填，hair 至少包含发色和长度/发型，eyes 必须包含瞳色，缺任一项该条建档会被丢弃。
    - 如果设定没写发色、发型或瞳色，根据世界观、种族、身份、性格和其余角色设定补出简洁、协调、可长期复用的颜色与发型；这是一次性建档决定，后续不得重新随机。
-   - 建完档就直接用：同一次输出里，先在 changes 里确立该角色的固定外貌，再在图片 ${naiCharPromptsOn ? 'characters[].tag' : 'tag'} 中照抄这套外貌，并围绕它补充服装、动作、场景等其余 tag；同一张图里这套外貌只写一遍。${newCharacterNlRule}`;
-  const multiCharacterBindingRule = naiCharPromptsOn
-    ? '- 多人画面中，每个角色的发色、瞳色、体型、服装、物件和个人动作都必须放进各自的 characters[].tag，禁止放进 Base 或分配给其他角色。'
+   - 建完档就直接用：同一次输出里，先在 changes 里确立该角色的固定外貌，再在图片 ${characterPromptsOn ? 'characters[].tag' : 'tag'} 中照抄这套外貌，并围绕它补充服装、${nightmareCharPromptsOn && nlOn ? '表情与视线' : '动作、场景等其余 tag'}；同一张图里这套外貌只写一遍。${newCharacterNlRule}`;
+  const multiCharacterBindingRule = nightmareCharPromptsOn && nlOn
+    ? '- Nightmare 自然语言模式下，每个角色的发色、瞳色、体型、服装、物件、表情与视线放进各自的 characters[].tag；个人位置与动作写进同一角色的 characters[].nl。共享互动留在 Base，禁止把个人特征放进 Base 或分配给其他角色。'
+    : characterPromptsOn
+      ? '- 多人画面中，每个角色的发色、瞳色、体型、服装、物件和个人动作都必须放进各自的 characters[].tag，禁止放进 Base 或分配给其他角色。'
     : '- 多人画面中，每个角色的发色、瞳色、体型、服装、物件和个人动作都必须使用该角色的区分性称谓邻接绑定，禁止把两人的外貌特征散放成无法归属的一串公共 tag。';
+  const clothingPromptRule = nightmareCharPromptsOn
+    ? '每位角色的 characters[].tag 都要写出当前镜头可见的关键服装特征；角色 nl 负责位置与个人动作，不重复服装外貌。'
+    : `每张图的 ${nlOn ? 'tag 与 nl 都' : 'tag 都'}要写出当前镜头可见的关键服装特征。`;
   const characterRule = `7. 角色状态与 changes：${newCharacterRule}
    ${libraryReferenceRule}
-   - 按正文 P 位置为每个角色维护临时服装状态：正文未明确初始穿着时可以合理决定一次；没有穿上、脱下、换装、衣物损坏或场景/时间跳跃时沿用上一状态，发生明确变化后从对应 P 位置起更新。首次确定一套临时服装时，必须冻结足以复现款式的“服装视觉指纹”：服装类别之外，再固定版型/剪裁、主色和关键部件，涉及裤袜时固定颜色与透明度；例如不能只写 school uniform, pantyhose，而应具体到 navy school blazer, white collared shirt, red ribbon, dark pleated skirt, opaque white pantyhose。只补少量关键特征，不堆无关装饰。相同状态复用同一视觉指纹；镜头外不可见的部件可以省略，但省略不等于脱掉，后续重新可见且中间没有变化时必须恢复。每张图的 ${nlOn ? 'tag 与 nl 都' : 'tag 都'}要写出当前镜头可见的关键服装特征。临时穿着不得写进固定 outfit，除非设定明确它是长期不换的招牌着装。
+   - 按正文 P 位置为每个角色维护临时服装状态：正文未明确初始穿着时可以合理决定一次；没有穿上、脱下、换装、衣物损坏或场景/时间跳跃时沿用上一状态，发生明确变化后从对应 P 位置起更新。首次确定一套临时服装时，必须冻结足以复现款式的“服装视觉指纹”：服装类别之外，再固定版型/剪裁、主色和关键部件，涉及裤袜时固定颜色与透明度；例如不能只写 school uniform, pantyhose，而应具体到 navy school blazer, white collared shirt, red ribbon, dark pleated skirt, opaque white pantyhose。只补少量关键特征，不堆无关装饰。相同状态复用同一视觉指纹；镜头外不可见的部件可以省略，但省略不等于脱掉，后续重新可见且中间没有变化时必须恢复。${clothingPromptRule}临时穿着不得写进固定 outfit，除非设定明确它是长期不换的招牌着装。
    ${multiCharacterBindingRule}
    - 库中已有角色发生**永久外貌变化**（染发、剪发、留疤、长大、永久变身、固定造型改变等）时，必须通过 changes 报告：{"name":"角色名","field":"hair","value":"short red hair","position":"P4","reason":"在此处染发并剪短"}；field 只能是 sex/hair/eyes/skin/body/extra/outfit/fandom。
    - 已建档角色被判定为同人、但档案里没有 fandom 的，必须补一条 changes：{"name":"角色名","field":"fandom","value":"character name (copyright name)","reason":"判定为同人，补身份 tag"}；档案已有 fandom 的直接照抄，不重复报告。

@@ -139,14 +139,24 @@ describe('Nightmare API', () => {
       activePromptPresetId: 'preset-2',
     }), {
       prompt: '2girls, cafe',
+      nl: 'Two girls meet in a quiet cafe.',
       characters: [
         { name: 'A', tag: '1girl, silver hair', nl: 'The first girl is on the left.' },
         { name: 'B', tag: '1girl, black hair', nl: '' },
       ],
       seed: 1,
     });
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)).prompt)
-      .toBe('masterpiece, 2girls, cafe, 1girl, silver hair, The first girl is on the left., 1girl, black hair, dramatic lighting');
+    const prompt: string = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)).prompt;
+    expect(prompt).toBe(
+      'masterpiece\n\n' +
+        'Scene: Two girls meet in a quiet cafe.\n\n' +
+        'Characters:\n' +
+        'Character 1: Appearance: 1girl, silver hair; In-scene description: The first girl is on the left.\n' +
+        'Character 2: Appearance: 1girl, black hair\n\n' +
+        'dramatic lighting',
+    );
+    expect(prompt).not.toContain('A:');
+    expect(prompt).not.toContain('B:');
   });
 
   it('reports Nightmare API conflicts with an actionable error', async () => {

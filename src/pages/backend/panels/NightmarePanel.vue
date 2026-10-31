@@ -5,11 +5,12 @@ import {
   testNightmareConnection,
   type NightmareModel,
 } from '@/backends/nightmare';
+import BbiSelect from '@/components/BbiSelect.vue';
 import Collapsible from '@/components/Collapsible.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
 import { activeComfyPreset, activeNightmarePromptPreset, newNightmarePromptPreset, settings } from '@/state/settings';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const testing = ref(false);
 const loadingModels = ref(false);
@@ -29,6 +30,9 @@ const activePromptPresetId = computed<string>({
     settings.nightmare.activePromptPresetId = id;
   },
 });
+const renamingPromptPreset = ref(false);
+const promptPresetNameDraft = ref('');
+const promptPresetNameInput = ref<HTMLInputElement | null>(null);
 const confirmDeletePromptOpen = ref(false);
 const comfyAnimaPreset = computed(() => {
   const preset = activeComfyPreset();
@@ -42,6 +46,20 @@ function copyComfyAnimaPrompts(): void {
   if (promptPreset.value) promptPreset.value.prefix = preset.simple.positive;
   settings.nightmare.negativePrompt = preset.simple.negative;
   toastr.success('已复制 ComfyUI Anima 固定正负面提示词', '柏宝绘');
+}
+
+function startRenamePromptPreset(): void {
+  if (!promptPreset.value) return;
+  promptPresetNameDraft.value = promptPreset.value.name;
+  renamingPromptPreset.value = true;
+  nextTick(() => promptPresetNameInput.value?.focus());
+}
+
+function commitRenamePromptPreset(): void {
+  if (renamingPromptPreset.value && promptPreset.value) {
+    promptPreset.value.name = promptPresetNameDraft.value.trim();
+  }
+  renamingPromptPreset.value = false;
 }
 
 function addPromptPreset(): void {
@@ -192,20 +210,41 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
         <div class="bbi-field">
           <div class="bbi-field-head"><span class="bbi-field-label">固定正向提示词</span></div>
           <div class="prompt-preset-row">
-            <select v-model="activePromptPresetId" class="bbi-input bbi-select" aria-label="当前固定提示词">
-              <option v-for="option in promptPresetOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-            <input v-if="promptPreset" v-model="promptPreset.name" class="bbi-input prompt-preset-name" placeholder="提示词名称" />
+            <input
+              v-if="renamingPromptPreset"
+              ref="promptPresetNameInput"
+              v-model="promptPresetNameDraft"
+              class="bbi-input prompt-preset-name"
+              type="text"
+              placeholder="提示词名称"
+              spellcheck="false"
+              title="Enter 确认，Esc 取消"
+              @keydown.enter.prevent="commitRenamePromptPreset"
+              @keydown.esc.stop.prevent="renamingPromptPreset = false"
+              @blur="commitRenamePromptPreset"
+            />
+            <BbiSelect
+              v-else
+              class="prompt-preset-select"
+              v-model="activePromptPresetId"
+              :options="promptPresetOptions"
+              aria-label="当前固定提示词"
+            />
             <span class="prompt-preset-actions">
-              <button class="bbi-icon-btn" type="button" title="新建固定提示词" aria-label="新建固定提示词" @click="addPromptPreset">
-                <Icon name="plus" :size="14" />
-              </button>
-              <button class="bbi-icon-btn" type="button" :disabled="!promptPreset" title="复制当前固定提示词" aria-label="复制当前固定提示词" @click="duplicatePromptPreset">
-                <Icon name="copy" :size="14" />
-              </button>
-              <button class="bbi-icon-btn" type="button" :disabled="!promptPreset" title="删除当前固定提示词" aria-label="删除当前固定提示词" @click="confirmDeletePromptOpen = true">
-                <Icon name="trash" :size="14" />
-              </button>
+              <template v-if="!renamingPromptPreset">
+                <button class="bbi-icon-btn prompt-preset-action" type="button" :disabled="!promptPreset" title="重命名当前固定提示词" aria-label="重命名当前固定提示词" @click="startRenamePromptPreset">
+                  <Icon name="edit" :size="14" />
+                </button>
+                <button class="bbi-icon-btn prompt-preset-action" type="button" title="新建固定提示词" aria-label="新建固定提示词" @click="addPromptPreset">
+                  <Icon name="plus" :size="14" />
+                </button>
+                <button class="bbi-icon-btn prompt-preset-action" type="button" :disabled="!promptPreset" title="复制当前固定提示词" aria-label="复制当前固定提示词" @click="duplicatePromptPreset">
+                  <Icon name="copy" :size="14" />
+                </button>
+                <button class="bbi-icon-btn prompt-preset-action" type="button" :disabled="!promptPreset" title="删除当前固定提示词" aria-label="删除当前固定提示词" @click="confirmDeletePromptOpen = true">
+                  <Icon name="trash" :size="14" />
+                </button>
+              </template>
             </span>
           </div>
           <template v-if="promptPreset">
@@ -262,16 +301,17 @@ watch(() => [settings.nightmare.url, settings.nightmare.token] as const, ([url, 
 .conn-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .prompt-copy-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .prompt-preset-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-.prompt-preset-row > .bbi-select { min-width: 0; flex: 1 1 160px; }
+.prompt-preset-row > .prompt-preset-select { width: auto; min-width: 0; flex: 1 1 160px; }
 .prompt-preset-name { flex: 1 1 120px; min-width: 0; }
-.prompt-preset-actions { display: flex; flex: 0 0 auto; gap: 2px; }
+.prompt-preset-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.prompt-preset-action { width: 30px; height: 30px; font-size: 13px; }
 .prompt-suffix { margin-top: 8px; }
 .bbi-textarea { resize: vertical; }
 @media (max-width: 640px) {
   .be-grid { grid-template-columns: 1fr; }
   .prompt-copy-row { align-items: flex-start; flex-direction: column; }
   .prompt-preset-row { flex-wrap: wrap; }
-  .prompt-preset-row > .bbi-select { flex-basis: calc(100% - 88px); }
+  .prompt-preset-row > .prompt-preset-select { flex-basis: calc(100% - 88px); }
   .prompt-preset-name { flex-basis: 100%; }
 }
 </style>

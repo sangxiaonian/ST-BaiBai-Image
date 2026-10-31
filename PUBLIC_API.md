@@ -202,7 +202,7 @@ if (!result.charactersApplied) {
 }
 ```
 
-`charactersApplied` 明说这次到底用上了没有。NAI 4.5/V5 会使用原生角色槽位；Nightmare 会将角色 tag 与 nl 合并到正向提示词中，不能保证像 NAI 原生槽位一样精确区分每个角色；ComfyUI 不支持角色提示。请先看 `supportsCharacters`。
+`charactersApplied` 明说这次到底用上了没有。NAI 4.5/V5 会使用原生角色槽位；Nightmare 会将角色 tag 与 nl 合并到正向提示词，并用 `Scene`、`Characters`、`Appearance` 和 `In-scene description` 等分段标记组织角色信息。Nightmare 不提供原生角色槽位，因此这种格式不能保证像 NAI 一样精确区分角色；角色 `name` 只用于柏宝绘内部关联，不会写入 Nightmare 的提示词。ComfyUI 不支持角色提示。请先看 `supportsCharacters`。
 
 ### 进度与取消
 

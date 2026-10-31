@@ -38,12 +38,25 @@ export interface NightmarePrompts {
 export function composeNightmarePrompts(settings: NightmareSettings, values: NightmareGenerateValues): NightmarePrompts {
   const preset = settings.promptPresets.find(item => item.id === settings.activePromptPresetId);
   const scene = values.nl?.trim() || values.prompt.trim();
-  const characterPrompts = (values.characters ?? []).flatMap(character => [
-    character.tag.trim(),
-    character.nl?.trim() ?? '',
-  ]);
+  const characters = (values.characters ?? [])
+    .map((character, index) => {
+      const details = [
+        character.tag.trim() ? `Appearance: ${character.tag.trim()}` : '',
+        character.nl?.trim() ? `In-scene description: ${character.nl.trim()}` : '',
+      ].filter(Boolean);
+      return details.length ? `Character ${index + 1}: ${details.join('; ')}` : '';
+    })
+    .filter(Boolean);
+  const hasCharacterPrompts = characters.length > 0;
   return {
-    prompt: [preset?.prefix.trim(), scene, ...characterPrompts, preset?.suffix.trim()].filter(Boolean).join(', '),
+    prompt: [
+      preset?.prefix.trim(),
+      hasCharacterPrompts ? `Scene: ${scene}` : scene,
+      ...(hasCharacterPrompts ? [`Characters:\n${characters.join('\n')}`] : []),
+      preset?.suffix.trim(),
+    ]
+      .filter(Boolean)
+      .join(hasCharacterPrompts ? '\n\n' : ', '),
     negative: [settings.negativePrompt.trim(), values.negative?.trim()].filter(Boolean).join(', '),
   };
 }

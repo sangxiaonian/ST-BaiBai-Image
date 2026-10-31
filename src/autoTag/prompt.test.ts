@@ -1036,6 +1036,7 @@ describe('NAI「生成自然语言」开关与渠道画幅锁', () => {
       model: settings.nai.model,
       naiNl: settings.nai.naturalLanguage,
       naiLock: settings.nai.orientationLock,
+      nightmareNl: settings.nightmare.naturalLanguage,
       presetNl: preset.naturalLanguage,
       presetLock: preset.orientationLock,
     };
@@ -1046,6 +1047,7 @@ describe('NAI「生成自然语言」开关与渠道画幅锁', () => {
         settings.nai.model = saved.model;
         settings.nai.naturalLanguage = saved.naiNl;
         settings.nai.orientationLock = saved.naiLock;
+        settings.nightmare.naturalLanguage = saved.nightmareNl;
         preset.naturalLanguage = saved.presetNl;
         preset.orientationLock = saved.presetLock;
       },
@@ -1061,6 +1063,32 @@ describe('NAI「生成自然语言」开关与渠道画幅锁', () => {
     expect(found, mark).toBeTruthy();
     return found!.content;
   }
+
+  it.each([true, false])('generates Nightmare character blocks with natural language %s', async nl => {
+    const state = snapshot();
+    try {
+      settings.defaultBackend = 'nightmare';
+      settings.nightmare.naturalLanguage = nl;
+      const messages = await buildAutoTagMessages(context(), 1, options(), null);
+      const contract = pick(messages, CONTRACT_MARK);
+      const spec = pick(messages, '【Nightmare 结构化角色提示补充】');
+
+      expect(contract).toContain('"characters":[{"name":"小雪"');
+      expect(contract).toContain('Base tag');
+      expect(spec).toContain('characters[].tag');
+      expect(spec).toContain('姓名只放在 name 字段');
+      if (nl) {
+        expect(contract).toContain('"nl":"A classroom at sunset, with warm light across the room."');
+        expect(spec).toContain('characters[].nl 用英文短句说明该角色在画面中的位置');
+      } else {
+        expect(contract).not.toContain('"nl":');
+        expect(spec).toContain('自然语言关闭时，characters[].tag 同时包含');
+        expect(spec).not.toContain('characters[].nl 用英文短句说明');
+      }
+    } finally {
+      state.restore();
+    }
+  });
 
   it.each(['nai-diffusion-4-5-full', 'nai-diffusion-5-full'] as const)(
     '关掉后 %s 的协议、规范、思维链整套切成纯 tag;拨回开启即恢复',
@@ -1194,11 +1222,21 @@ describe('NAI「生成自然语言」开关与渠道画幅锁', () => {
       settings.nai.model = 'nai-diffusion-4-5-full';
       settings.nai.naturalLanguage = true;
       settings.nai.orientationLock = 'auto';
-      expect(autoTagProfile()).toEqual({ naiCharPrompts: true, nl: true, lockedSize: null });
+      expect(autoTagProfile()).toEqual({
+        naiCharPrompts: true,
+        nightmareCharPrompts: false,
+        nl: true,
+        lockedSize: null,
+      });
 
       settings.nai.naturalLanguage = false;
       settings.nai.orientationLock = 'portrait';
-      expect(autoTagProfile()).toEqual({ naiCharPrompts: true, nl: false, lockedSize: 'portrait' });
+      expect(autoTagProfile()).toEqual({
+        naiCharPrompts: true,
+        nightmareCharPrompts: false,
+        nl: false,
+        lockedSize: 'portrait',
+      });
 
       // 单串分支(NAI4)的协议本来就不写 nl,开关对它不起作用
       settings.nai.model = 'nai-diffusion-4-full';
@@ -1209,11 +1247,38 @@ describe('NAI「生成自然语言」开关与渠道画幅锁', () => {
       settings.defaultBackend = 'comfyui';
       state.preset.naturalLanguage = true;
       state.preset.orientationLock = 'landscape';
-      expect(autoTagProfile()).toEqual({ naiCharPrompts: false, nl: true, lockedSize: 'landscape' });
+      expect(autoTagProfile()).toEqual({
+        naiCharPrompts: false,
+        nightmareCharPrompts: false,
+        nl: true,
+        lockedSize: 'landscape',
+      });
 
       state.preset.naturalLanguage = false;
       state.preset.orientationLock = 'auto';
-      expect(autoTagProfile()).toEqual({ naiCharPrompts: false, nl: false, lockedSize: null });
+      expect(autoTagProfile()).toEqual({
+        naiCharPrompts: false,
+        nightmareCharPrompts: false,
+        nl: false,
+        lockedSize: null,
+      });
+
+      settings.defaultBackend = 'nightmare';
+      settings.nightmare.naturalLanguage = true;
+      expect(autoTagProfile()).toEqual({
+        naiCharPrompts: false,
+        nightmareCharPrompts: true,
+        nl: true,
+        lockedSize: null,
+      });
+
+      settings.nightmare.naturalLanguage = false;
+      expect(autoTagProfile()).toEqual({
+        naiCharPrompts: false,
+        nightmareCharPrompts: true,
+        nl: false,
+        lockedSize: null,
+      });
     } finally {
       state.restore();
     }
